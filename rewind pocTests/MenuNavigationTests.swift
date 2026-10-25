@@ -25,7 +25,7 @@ struct MenuNavigationTests {
         #expect(MenuBuilder.items(for: .music, context: context).map(\.title)
                 == ["Songs", "Artists", "Albums", "Local Files", "Cloud"])
         let settings = MenuBuilder.items(for: .settings, context: context).map(\.title)
-        for required in ["Appearance", "Click Sound", "Haptics", "Wall", "Haptics Lab", "Import Files", "About"] {
+        for required in ["Appearance", "Click Sound", "Haptics", "Haptics Lab", "Import Files", "About"] {
             #expect(settings.contains(required))
         }
     }
@@ -49,8 +49,6 @@ struct MenuNavigationTests {
 
     @Test func moveHitsWallsAndNeverWraps() {
         let nav = navigator(context)          // main: 3 rows
-        #expect(!nav.canMove(.backward))
-        #expect(nav.canMove(.forward))
         #expect(nav.move(.backward) == .wall)
         #expect(nav.current.selected == 0)
         #expect(nav.move(.forward) == .moved)

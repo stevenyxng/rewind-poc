@@ -36,10 +36,6 @@ final class MenuNavigator {
     }
 
     /// Moves the selection one row. Never wraps: at either end it reports `.wall`.
-    func canMove(_ direction: TickDirection) -> Bool {
-        items.indices.contains(current.selected + direction.sign)
-    }
-
     func move(_ direction: TickDirection) -> MoveResult {
         let count = items.count
         let target = current.selected + direction.sign

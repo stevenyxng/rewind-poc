@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// Settings > Haptics Lab: live sliders for every `HapticParameter`, saved as you drag.
-/// The wheel stays live: spin it to feel the detent ramp on a 24-step test strip.
+/// The wheel stays live: spin it to feel the detent clicks on a 24-step test strip.
 struct HapticsLabView: View {
     let model: AppModel
 
@@ -49,10 +49,9 @@ struct HapticsLabView: View {
 
     private var detentStrip: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("Spin the wheel to feel detents and walls")
+            Text("Spin the wheel to feel detents")
                 .font(.system(size: 13))
                 .foregroundStyle(Theme.secondary)
-            wallReadout
             HStack(spacing: 3) {
                 ForEach(0..<AppModel.labDetentCount, id: \.self) { i in
                     RoundedRectangle(cornerRadius: 1.5)
@@ -63,27 +62,9 @@ struct HapticsLabView: View {
         }
     }
 
-    /// Live wall state while pushing past either end of the strip, to tell "too weak to feel"
-    /// apart from "not firing".
-    private var wallReadout: some View {
-        let overshoot = haptics.wallOvershoot
-        let intensity = HapticCurves.wallIntensity(overshoot: overshoot, tuning: haptics.tuning)
-        let text = if !model.settings.wall {
-            "Wall: off (turn on in Settings → Wall)"
-        } else if overshoot > 0 {
-            String(format: "Wall: %.2f detents past end · intensity %.2f", overshoot, intensity)
-        } else {
-            "Wall: not pushing"
-        }
-        return Text(text)
-            .font(Theme.monoFont)
-            .foregroundStyle(overshoot > 0 ? Theme.accent : Theme.secondary)
-    }
-
     private var testButtons: some View {
         LazyVGrid(columns: [GridItem(.adaptive(minimum: 88), spacing: 6)], spacing: 6) {
             testButton("Detent") { haptics.detent() }
-            testButton("Wall push") { haptics.previewWall() }
             testButton("Bump") { haptics.bump() }
             testButton("Button") { haptics.button(.menu) }
             testButton("Center") { haptics.button(.center) }

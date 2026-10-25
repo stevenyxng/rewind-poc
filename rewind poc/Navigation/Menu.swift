@@ -16,7 +16,7 @@ nonisolated enum Screen: Hashable, Sendable {
 }
 
 nonisolated enum SettingToggle: Equatable, Sendable {
-    case appearance, clickSound, haptics, wall, shuffle, repeatMode
+    case appearance, clickSound, haptics, shuffle, repeatMode
 }
 
 /// What selecting a row does. `push` is handled by the navigator; everything else by `AppModel`.
@@ -51,7 +51,6 @@ nonisolated struct MenuContext: Sendable {
     var hasNowPlaying = false
     var clickSound = true
     var haptics = true
-    var wall = false
     var shuffle = false
     var repeatMode = RepeatMode.off
     var appearance = Appearance.system
@@ -157,7 +156,6 @@ nonisolated enum MenuBuilder {
                 MenuItem(id: "appearance", title: "Appearance", detail: c.appearance.label, action: .toggle(.appearance)),
                 MenuItem(id: "click", title: "Click Sound", detail: onOff(c.clickSound), action: .toggle(.clickSound)),
                 MenuItem(id: "haptics", title: "Haptics", detail: onOff(c.haptics), action: .toggle(.haptics)),
-                MenuItem(id: "wall", title: "Wall", detail: onOff(c.wall), action: .toggle(.wall)),
                 MenuItem(id: "lab", title: "Haptics Lab", action: .push(.hapticsLab)),
                 MenuItem(id: "shuffle", title: "Shuffle", detail: onOff(c.shuffle), action: .toggle(.shuffle)),
                 MenuItem(id: "repeat", title: "Repeat", detail: c.repeatMode.label, action: .toggle(.repeatMode)),

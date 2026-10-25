@@ -72,32 +72,4 @@ struct WheelMathTests {
         meter.record(at: 10)   // long pause
         #expect(meter.ticksPerSecond < 1)
     }
-
-    @Test func wallPushGrowsContinuouslyPastTheEnd() {
-        var push = WallPush()
-        let atEnd: (TickDirection) -> Bool = { $0 == .forward }   // on the last row
-        #expect(push.overshoot(progress: -0.5, blocked: atEnd) == 0)   // heading away: no wall
-        #expect(push.overshoot(progress: 0.4, blocked: atEnd) == 0.4)  // leaning into it before any tick
-        push.hitWall(.forward)
-        #expect(push.overshoot(progress: 0, blocked: atEnd) == 1)      // continuous across the tick
-        #expect(push.overshoot(progress: 0.5, blocked: atEnd) == 1.5)
-        push.hitWall(.forward)
-        #expect(push.overshoot(progress: 0.25, blocked: atEnd) == 2.25)
-    }
-
-    @Test func wallPushUnwindsBeforeAnythingMoves() {
-        var push = WallPush()
-        push.hitWall(.forward)
-        push.hitWall(.forward)
-        #expect(push.overshoot(progress: -0.5, blocked: { _ in true }) == 1.5)  // backing off
-        let first = push.absorbs(.backward), second = push.absorbs(.backward), third = push.absorbs(.backward)
-        #expect(first && second)                 // unwinding, not moving
-        #expect(!third)                          // back at the endpoint: this tick moves
-        #expect(push.ticks == 0)
-        push.hitWall(.forward)
-        let further = push.absorbs(.forward)
-        #expect(!further)                        // pushing further in is never absorbed
-        push.moved()
-        #expect(push == WallPush())
-    }
 }
