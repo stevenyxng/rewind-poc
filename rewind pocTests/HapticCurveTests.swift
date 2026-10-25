@@ -48,6 +48,21 @@ struct HapticCurveTests {
         #expect(HapticCurves.rampIntensity(progress: 5, tuning: tuning) == HapticCurves.rampIntensity(progress: 1, tuning: tuning))
     }
 
+    @Test func wallRampsFromStartToMaxWithDistance() {
+        #expect(HapticCurves.wallIntensity(overshoot: 0, tuning: tuning) == 0)     // silent at the endpoint
+        let justPast = HapticCurves.wallIntensity(overshoot: 0.01, tuning: tuning)
+        #expect(abs(justPast - tuning[.wallStartIntensity]) < 0.01)
+        let full = tuning[.wallFullDistance]
+        #expect(abs(HapticCurves.wallIntensity(overshoot: full, tuning: tuning) - tuning[.wallMaxIntensity]) < 1e-9)
+        #expect(HapticCurves.wallIntensity(overshoot: full * 3, tuning: tuning) == HapticCurves.wallIntensity(overshoot: full, tuning: tuning))
+        var last = 0.0
+        for i in 1...30 {
+            let v = HapticCurves.wallIntensity(overshoot: full * Double(i) / 30, tuning: tuning)
+            #expect(v >= last)
+            last = v
+        }
+    }
+
     @Test func fasterScrubIsSharper() {
         let slow = HapticCurves.scrubSharpness(rate: 1, tuning: tuning)
         let fast = HapticCurves.scrubSharpness(rate: 100, tuning: tuning)

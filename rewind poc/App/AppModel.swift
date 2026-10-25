@@ -21,6 +21,7 @@ final class AppModel {
     private(set) var labDetent = 0
 
     @ObservationIgnored let clickSound = ClickSound()
+    @ObservationIgnored private var wallPush = WallPush()
     @ObservationIgnored var clock: () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }
     @ObservationIgnored private var scrubSettleTask: Task<Void, Never>?
     @ObservationIgnored private var messageTask: Task<Void, Never>?
@@ -90,11 +91,17 @@ final class AppModel {
             // click on release, once we know the touch wasn't the start of a spin.
             if button == .center { buttonClick(.center) }
         case .rotationBegan:
+            wallPush.reset()
             if usesDetentRamp { haptics.beginRamp() }
         case .rotation(let progress):
-            if usesDetentRamp { haptics.updateRamp(progress: progress) }
+            let overshoot = wallPush.overshoot(progress: progress, blocked: isBlocked)
+            // Past the end there's no next detent to build tension toward; the wall takes over.
+            if usesDetentRamp { haptics.updateRamp(progress: overshoot > 0 ? 0 : progress) }
+            haptics.updateWall(overshoot: overshoot)
         case .rotationEnded:
             haptics.endRamp()
+            haptics.endWall()
+            wallPush.reset()
         case .tick(let direction, let rate):
             tick(direction, rate: rate)
         case .press(let button):
@@ -110,7 +117,22 @@ final class AppModel {
     /// Menus (and the Lab's test strip) get the tension ramp; Now Playing uses discrete clicks only.
     private var usesDetentRamp: Bool { navigator.screen != .nowPlaying }
 
+    /// Whether the wheel is at an end in `direction` on the current screen.
+    private func isBlocked(_ direction: TickDirection) -> Bool {
+        switch navigator.screen {
+        case .nowPlaying:
+            guard player.hasTrack, player.duration > 0 else { return true }
+            let position = scrubPosition ?? player.currentTime
+            return direction == .forward ? position >= player.duration : position <= 0
+        case .hapticsLab:
+            return !(0..<Self.labDetentCount).contains(labDetent + direction.sign)
+        default:
+            return !navigator.canMove(direction)
+        }
+    }
+
     private func tick(_ direction: TickDirection, rate: Double) {
+        if wallPush.absorbs(direction) { return }
         switch navigator.screen {
         case .nowPlaying:
             scrubTick(direction, rate: rate)
@@ -118,18 +140,20 @@ final class AppModel {
             let target = labDetent + direction.sign
             if (0..<Self.labDetentCount).contains(target) {
                 labDetent = target
+                wallPush.moved()
                 haptics.detent()
                 clickSound.play()
             } else {
-                haptics.wall()
+                wallPush.hitWall(direction)
             }
         default:
             switch navigator.move(direction) {
             case .moved:
+                wallPush.moved()
                 haptics.detent()
                 clickSound.play()
             case .wall:
-                haptics.wall()
+                wallPush.hitWall(direction)
             }
         }
     }
@@ -137,18 +161,24 @@ final class AppModel {
     private func scrubTick(_ direction: TickDirection, rate: Double) {
         scheduleScrubSettle()
         guard player.hasTrack, player.duration > 0 else {
-            haptics.wall()
+            wallPush.hitWall(direction)
             return
         }
-        let (position, feedback) = Scrubber.step(from: scrubPosition ?? player.currentTime, direction, rate: rate,
+        let from = scrubPosition ?? player.currentTime
+        let (position, feedback) = Scrubber.step(from: from, direction, rate: rate,
                                                  duration: player.duration, spacing: haptics.tuning[.scrubSpacing])
+        guard position != from else {
+            wallPush.hitWall(direction)     // already at the start or end
+            return
+        }
+        wallPush.moved()
         scrubPosition = position
         player.seek(to: position)
         switch feedback {
         case .none: break
         case .tick: haptics.scrubTick(rate: rate); clickSound.play()
         case .mark: haptics.scrubMark(); clickSound.play()
-        case .wall: haptics.wall()
+        case .wall: break               // just arrived at the start or end; pushing on is the wall
         }
     }
 
@@ -198,7 +228,7 @@ final class AppModel {
         case .shuffleAll:
             let all = menuContext.allTracks
             guard !all.isEmpty else {
-                haptics.wall()
+                haptics.bump()
                 show("No songs yet. Import some in Settings.")
                 return
             }

@@ -49,6 +49,8 @@ struct MenuNavigationTests {
 
     @Test func moveHitsWallsAndNeverWraps() {
         let nav = navigator(context)          // main: 3 rows
+        #expect(!nav.canMove(.backward))
+        #expect(nav.canMove(.forward))
         #expect(nav.move(.backward) == .wall)
         #expect(nav.current.selected == 0)
         #expect(nav.move(.forward) == .moved)

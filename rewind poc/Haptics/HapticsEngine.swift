@@ -13,8 +13,9 @@ nonisolated enum HapticParameter: String, CaseIterable, Identifiable, Sendable {
     case rampPeak, rampFloor, rampCurve, rampOnset, rampSharpness
     // Menu detent click: the transient fired exactly at each tick.
     case detentIntensity, detentSharpness
-    // Wall: soft, dull bump at the end of a list or the start/end of a track.
-    case wallIntensity, wallSharpness, wallDuration
+    // Wall: continuous vibration while pushing past the end of a list (or the start/end of
+    // a track), growing the farther the finger goes past the endpoint.
+    case wallStartIntensity, wallMaxIntensity, wallFullDistance, wallCurve, wallSharpness
     // Buttons.
     case buttonIntensity, buttonSharpness, centerIntensity, centerSharpness
     // Scrubbing in Now Playing.
@@ -42,9 +43,11 @@ nonisolated enum HapticParameter: String, CaseIterable, Identifiable, Sendable {
         case .detentIntensity:   Spec(label: "Click intensity", group: "Detent click", defaultValue: 0.85, range: 0...1)
         case .detentSharpness:   Spec(label: "Click sharpness", group: "Detent click", defaultValue: 0.90, range: 0...1)
 
-        case .wallIntensity:     Spec(label: "Wall intensity",  group: "Wall", defaultValue: 0.55, range: 0...1)
-        case .wallSharpness:     Spec(label: "Wall sharpness",  group: "Wall", defaultValue: 0.05, range: 0...1)
-        case .wallDuration:      Spec(label: "Wall duration (s)", group: "Wall", defaultValue: 0.06, range: 0.01...0.25)
+        case .wallStartIntensity: Spec(label: "Wall start intensity", group: "Wall", defaultValue: 0.10, range: 0...1)
+        case .wallMaxIntensity:  Spec(label: "Wall max intensity", group: "Wall", defaultValue: 0.90, range: 0...1)
+        case .wallFullDistance:  Spec(label: "Max at (detents past end)", group: "Wall", defaultValue: 3.0, range: 0.5...8)
+        case .wallCurve:         Spec(label: "Wall curve (exp)", group: "Wall", defaultValue: 1.5, range: 0.5...5)
+        case .wallSharpness:     Spec(label: "Wall sharpness",  group: "Wall", defaultValue: 0.10, range: 0...1)
 
         case .buttonIntensity:   Spec(label: "Button intensity", group: "Buttons", defaultValue: 0.60, range: 0...1)
         case .buttonSharpness:   Spec(label: "Button sharpness", group: "Buttons", defaultValue: 0.85, range: 0...1)
@@ -107,6 +110,15 @@ nonisolated enum HapticCurves {
         return floor + (tuning[.rampPeak] - floor) * pow(t, tuning[.rampCurve])
     }
 
+    /// Wall intensity for a finger `overshoot` detents past the endpoint: silent at the endpoint,
+    /// then from the start intensity up to the max at the full distance, shaped by the curve.
+    static func wallIntensity(overshoot: Double, tuning: HapticsTuning) -> Double {
+        guard overshoot > 0 else { return 0 }
+        let t = min(overshoot / tuning[.wallFullDistance], 1)
+        let start = tuning[.wallStartIntensity]
+        return start + (tuning[.wallMaxIntensity] - start) * pow(t, tuning[.wallCurve])
+    }
+
     /// Scrub tick sharpness: crisper as the spin gets faster.
     static func scrubSharpness(rate: Double, tuning: HapticsTuning) -> Double {
         let t = min(max(rate / tuning[.scrubFastRate], 0), 1)
@@ -131,25 +143,20 @@ final class HapticsEngine {
 
     /// Master switch (Settings > Haptics).
     var isEnabled = true {
-        didSet { if !isEnabled { endRamp() } }
+        didSet { if !isEnabled { endRamp(); endWall() } }
     }
 
-    /// Duration of the looping ramp pattern. 30s is the longest continuous event Core Haptics allows.
-    private static let rampPatternDuration: TimeInterval = 30
-    /// Ramp updates smaller than this are skipped...
-    private static let rampEpsilon = 0.01
-    /// ...unless this long has passed, which also recovers from the pattern's loop restart.
-    private static let rampRefreshInterval: TimeInterval = 0.25
+    /// Length of the one-off `bump()`.
+    private static let bumpDuration: TimeInterval = 0.06
 
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored let supportsCoreHaptics = CHHapticEngine.capabilitiesForHardware().supportsHaptics
     @ObservationIgnored private var engine: CHHapticEngine?
     @ObservationIgnored private var engineNeedsStart = true
-    @ObservationIgnored private var rampPlayer: CHHapticAdvancedPatternPlayer?
-    @ObservationIgnored private var rampWanted = false
-    @ObservationIgnored private var rampPlaying = false
-    @ObservationIgnored private var lastRampIntensity: Double = -1
-    @ObservationIgnored private var lastRampSend: TimeInterval = 0
+    @ObservationIgnored private let ramp = ContinuousHaptic()
+    @ObservationIgnored private let wallHaptic = ContinuousHaptic()
+    /// Whole detents of the current wall push already given a fallback bump (no Core Haptics).
+    @ObservationIgnored private var fallbackWallStep = 0
     @ObservationIgnored private let fallback = FallbackHaptics()
     @ObservationIgnored private var observers: [NSObjectProtocol] = []
 
@@ -207,113 +214,98 @@ final class HapticsEngine {
 
     private func engineDidStop() {
         engineNeedsStart = true
-        rampPlayer = nil
-        rampPlaying = false
+        ramp.invalidate()
+        wallHaptic.invalidate()
     }
 
-    /// After a reset (e.g. the haptic server died) every player is invalid. Rebuild what's in use.
+    /// After a reset (e.g. the haptic server died) every player is invalid. The ramp is rebuilt
+    /// now; the wall rebuilds itself on its next update.
     private func engineDidReset() {
         engineDidStop()
-        if rampWanted { startRampPlayer() }
+        if ramp.wanted { start(ramp, sharpness: tuning[.rampSharpness], intensity: tuning[.rampFloor]) }
     }
 
     private func stopEngine() {
-        rampWanted = false
-        rampPlaying = false
-        rampPlayer = nil
+        ramp.wanted = false
+        wallHaptic.wanted = false
+        engineDidStop()
         engine?.stop(completionHandler: nil)
-        engineNeedsStart = true
+    }
+
+    private func start(_ haptic: ContinuousHaptic, sharpness: Double, intensity: Double) {
+        guard let engine = startEngineIfNeeded() else { return }
+        if !haptic.start(on: engine, sharpness: sharpness, intensity: intensity) { engineNeedsStart = true }
+    }
+
+    private func set(_ haptic: ContinuousHaptic, intensity: Double) {
+        if !haptic.setIntensity(intensity) { engineNeedsStart = true }
     }
 
     // MARK: Menu detent ramp
 
     func beginRamp() {
         guard isEnabled else { return }
-        rampWanted = true
-        startRampPlayer()
+        ramp.wanted = true
+        start(ramp, sharpness: tuning[.rampSharpness], intensity: tuning[.rampFloor])
     }
 
     /// `progress` is the signed fraction of the way to the next detent (-1...1).
     func updateRamp(progress: Double) {
-        guard isEnabled, rampWanted else { return }
-        if !rampPlaying { startRampPlayer() }
-        setRampIntensity(HapticCurves.rampIntensity(progress: progress, tuning: tuning))
+        guard isEnabled, ramp.wanted else { return }
+        let intensity = HapticCurves.rampIntensity(progress: progress, tuning: tuning)
+        if ramp.isPlaying {
+            set(ramp, intensity: intensity)
+        } else {
+            start(ramp, sharpness: tuning[.rampSharpness], intensity: intensity)
+        }
     }
 
     func endRamp() {
-        rampWanted = false
-        guard rampPlaying else { return }
-        try? rampPlayer?.stop(atTime: CHHapticTimeImmediate)
-        rampPlaying = false
+        ramp.wanted = false
+        ramp.stop()
     }
 
-    private func startRampPlayer() {
-        guard let engine = startEngineIfNeeded() else { return }
-        do {
-            if rampPlayer == nil {
-                let event = CHHapticEvent(
-                    eventType: .hapticContinuous,
-                    parameters: [
-                        CHHapticEventParameter(parameterID: .hapticIntensity, value: 1),
-                        CHHapticEventParameter(parameterID: .hapticSharpness, value: 0.5),
-                    ],
-                    relativeTime: 0,
-                    duration: Self.rampPatternDuration)
-                // Start silent so there's no blip before the first update.
-                let silent = CHHapticDynamicParameter(parameterID: .hapticIntensityControl, value: 0, relativeTime: 0)
-                let pattern = try CHHapticPattern(events: [event], parameters: [silent])
-                let player = try engine.makeAdvancedPlayer(with: pattern)
-                player.loopEnabled = true
-                rampPlayer = player
+    // MARK: Wall
+
+    /// `overshoot` is how far the finger is past the endpoint, in detents. 0 stops the wall.
+    func updateWall(overshoot: Double) {
+        guard isEnabled, overshoot > 0 else { endWall(); return }
+        guard supportsCoreHaptics else {
+            // No continuous haptics: a soft bump per whole detent pushed, stronger as it goes.
+            let step = Int(overshoot)
+            if step > fallbackWallStep {
+                fallback.play(.soft, intensity: HapticCurves.wallIntensity(overshoot: overshoot, tuning: tuning))
             }
-            try rampPlayer?.start(atTime: CHHapticTimeImmediate)
-            rampPlaying = true
-            lastRampIntensity = -1
-            // Sharpness is additive around the pattern's 0.5 base.
-            try rampPlayer?.sendParameters([
-                CHHapticDynamicParameter(parameterID: .hapticSharpnessControl,
-                                         value: Float(tuning[.rampSharpness] - 0.5), relativeTime: 0),
-            ], atTime: CHHapticTimeImmediate)
-            setRampIntensity(tuning[.rampFloor])
-        } catch {
-            rampPlayer = nil
-            rampPlaying = false
-            engineNeedsStart = true
+            fallbackWallStep = step
+            return
+        }
+        let intensity = HapticCurves.wallIntensity(overshoot: overshoot, tuning: tuning)
+        wallHaptic.wanted = true
+        if wallHaptic.isPlaying {
+            set(wallHaptic, intensity: intensity)
+        } else {
+            start(wallHaptic, sharpness: tuning[.wallSharpness], intensity: intensity)
         }
     }
 
-    private func setRampIntensity(_ value: Double) {
-        guard rampPlaying, let rampPlayer else { return }
-        let now = ProcessInfo.processInfo.systemUptime
-        guard abs(value - lastRampIntensity) >= Self.rampEpsilon
-                || now - lastRampSend >= Self.rampRefreshInterval else { return }
-        do {
-            try rampPlayer.sendParameters([
-                CHHapticDynamicParameter(parameterID: .hapticIntensityControl, value: Float(value), relativeTime: 0),
-            ], atTime: CHHapticTimeImmediate)
-            lastRampIntensity = value
-            lastRampSend = now
-        } catch {
-            // Engine likely stopped underneath us; the next update rebuilds the player.
-            self.rampPlayer = nil
-            rampPlaying = false
-            engineNeedsStart = true
-        }
+    func endWall() {
+        wallHaptic.wanted = false
+        wallHaptic.stop()
+        fallbackWallStep = 0
     }
 
     // MARK: Named effects
 
     /// The crisp click at a menu detent. Also drops the ramp straight back to its floor.
     func detent() {
-        setRampIntensity(tuning[.rampFloor])
+        set(ramp, intensity: tuning[.rampFloor])
         transient(tuning[.detentIntensity], tuning[.detentSharpness], fallback: .rigid)
     }
 
-    /// Soft, dull bump: can't go further (end of list, start/end of track).
-    func wall() {
-        setRampIntensity(tuning[.rampFloor])
-        let i = Float(tuning[.wallIntensity]), s = Float(tuning[.wallSharpness])
-        let duration = tuning[.wallDuration]
+    /// One-off dull bump for "can't do that" (e.g. Shuffle with no songs). Same feel as the wall at full push.
+    func bump() {
+        let i = Float(tuning[.wallMaxIntensity]), s = Float(tuning[.wallSharpness])
+        let duration = Self.bumpDuration
         play(events: [
             CHHapticEvent(eventType: .hapticTransient, parameters: [
                 CHHapticEventParameter(parameterID: .hapticIntensity, value: i * 0.8),
@@ -329,7 +321,26 @@ final class HapticsEngine {
                 .init(relativeTime: 0, value: 1),
                 .init(relativeTime: duration, value: 0),
             ], relativeTime: 0),
-        ], fallback: .soft, fallbackIntensity: tuning[.wallIntensity])
+        ], fallback: .soft, fallbackIntensity: tuning[.wallMaxIntensity])
+    }
+
+    /// Haptics Lab preview: the wall as if pushed steadily from the endpoint to the full distance.
+    func previewWall() {
+        let duration = 1.2
+        // Core Haptics allows at most 16 control points per curve.
+        let points = (0..<16).map { i -> CHHapticParameterCurve.ControlPoint in
+            let t = Double(i) / 15
+            let intensity = HapticCurves.wallIntensity(overshoot: max(t, 0.001) * tuning[.wallFullDistance], tuning: tuning)
+            return .init(relativeTime: t * duration, value: Float(intensity))
+        }
+        play(events: [
+            CHHapticEvent(eventType: .hapticContinuous, parameters: [
+                CHHapticEventParameter(parameterID: .hapticIntensity, value: 1),
+                CHHapticEventParameter(parameterID: .hapticSharpness, value: Float(tuning[.wallSharpness])),
+            ], relativeTime: 0, duration: duration),
+        ], curves: [
+            CHHapticParameterCurve(parameterID: .hapticIntensityControl, controlPoints: points, relativeTime: 0),
+        ], fallback: .soft, fallbackIntensity: tuning[.wallMaxIntensity])
     }
 
     func button(_ button: WheelButton) {
@@ -376,6 +387,87 @@ final class HapticsEngine {
     private func playPattern(_ events: [CHHapticEvent], _ curves: [CHHapticParameterCurve], on engine: CHHapticEngine) throws {
         let pattern = try CHHapticPattern(events: events, parameterCurves: curves)
         try engine.makePlayer(with: pattern).start(atTime: CHHapticTimeImmediate)
+    }
+}
+
+/// A looping continuous haptic whose intensity is changed live (the detent ramp, the wall).
+/// Wraps one `CHHapticAdvancedPatternPlayer`; invalidated whenever the engine stops or resets.
+private final class ContinuousHaptic {
+    /// 30 s is the longest continuous event Core Haptics allows; the pattern loops.
+    private static let patternDuration: TimeInterval = 30
+    /// Intensity updates smaller than this are skipped...
+    private static let epsilon = 0.01
+    /// ...unless this long has passed, which also recovers from the pattern's loop restart.
+    private static let refreshInterval: TimeInterval = 0.25
+
+    /// Whether the owner currently wants it running.
+    var wanted = false
+    private(set) var isPlaying = false
+    private var player: CHHapticAdvancedPatternPlayer?
+    private var lastIntensity: Double = -1
+    private var lastSend: TimeInterval = 0
+
+    /// Returns false if the player couldn't start; the engine likely needs restarting.
+    func start(on engine: CHHapticEngine, sharpness: Double, intensity: Double) -> Bool {
+        do {
+            if player == nil {
+                let event = CHHapticEvent(
+                    eventType: .hapticContinuous,
+                    parameters: [
+                        CHHapticEventParameter(parameterID: .hapticIntensity, value: 1),
+                        CHHapticEventParameter(parameterID: .hapticSharpness, value: 0.5),
+                    ],
+                    relativeTime: 0,
+                    duration: Self.patternDuration)
+                // Start silent so there's no blip before the first update.
+                let silent = CHHapticDynamicParameter(parameterID: .hapticIntensityControl, value: 0, relativeTime: 0)
+                let pattern = try CHHapticPattern(events: [event], parameters: [silent])
+                let newPlayer = try engine.makeAdvancedPlayer(with: pattern)
+                newPlayer.loopEnabled = true
+                player = newPlayer
+            }
+            try player?.start(atTime: CHHapticTimeImmediate)
+            isPlaying = true
+            lastIntensity = -1
+            // Sharpness is additive around the pattern's 0.5 base.
+            try player?.sendParameters([
+                CHHapticDynamicParameter(parameterID: .hapticSharpnessControl, value: Float(sharpness - 0.5), relativeTime: 0),
+            ], atTime: CHHapticTimeImmediate)
+            return setIntensity(intensity)
+        } catch {
+            invalidate()
+            return false
+        }
+    }
+
+    /// Returns false if sending failed (the engine stopped underneath us).
+    @discardableResult
+    func setIntensity(_ value: Double) -> Bool {
+        guard isPlaying, let player else { return true }
+        let now = ProcessInfo.processInfo.systemUptime
+        guard abs(value - lastIntensity) >= Self.epsilon || now - lastSend >= Self.refreshInterval else { return true }
+        do {
+            try player.sendParameters([
+                CHHapticDynamicParameter(parameterID: .hapticIntensityControl, value: Float(value), relativeTime: 0),
+            ], atTime: CHHapticTimeImmediate)
+            lastIntensity = value
+            lastSend = now
+            return true
+        } catch {
+            invalidate()
+            return false
+        }
+    }
+
+    func stop() {
+        guard isPlaying else { return }
+        try? player?.stop(atTime: CHHapticTimeImmediate)
+        isPlaying = false
+    }
+
+    func invalidate() {
+        player = nil
+        isPlaying = false
     }
 }
 

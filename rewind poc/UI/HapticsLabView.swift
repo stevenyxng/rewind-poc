@@ -65,7 +65,8 @@ struct HapticsLabView: View {
     private var testButtons: some View {
         LazyVGrid(columns: [GridItem(.adaptive(minimum: 88), spacing: 6)], spacing: 6) {
             testButton("Detent") { haptics.detent() }
-            testButton("Wall") { haptics.wall() }
+            testButton("Wall push") { haptics.previewWall() }
+            testButton("Bump") { haptics.bump() }
             testButton("Button") { haptics.button(.menu) }
             testButton("Center") { haptics.button(.center) }
             testButton("Scrub slow") { haptics.scrubTick(rate: 2) }

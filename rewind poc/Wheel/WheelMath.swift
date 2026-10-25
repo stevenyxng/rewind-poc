@@ -84,6 +84,49 @@ nonisolated struct WheelTracker: Equatable {
     }
 }
 
+/// How far the finger has pushed past an end (of a list, the Lab strip, or a track), in detents.
+///
+/// Ticks into the wall are counted rather than dropped, and turning back unwinds them before
+/// anything moves, so the wall behaves like a spring. `overshoot` is continuous: whole ticks
+/// pushed plus the finger's progress toward the next one.
+nonisolated struct WallPush: Equatable {
+    private(set) var direction: TickDirection?
+    private(set) var ticks = 0
+
+    /// Call first for every tick. True means the tick only unwound the push and should do nothing else.
+    mutating func absorbs(_ tick: TickDirection) -> Bool {
+        guard ticks > 0, let direction, tick != direction else { return false }
+        ticks -= 1
+        if ticks == 0 { self.direction = nil }
+        return true
+    }
+
+    /// The tick tried to go past the end.
+    mutating func hitWall(_ tick: TickDirection) {
+        if direction != tick { direction = tick; ticks = 0 }
+        ticks += 1
+    }
+
+    /// The tick moved something, so we're not pushing a wall.
+    mutating func moved() { reset() }
+
+    mutating func reset() {
+        direction = nil
+        ticks = 0
+    }
+
+    /// Detents past the endpoint for finger `progress` (-1...1, as `WheelTracker.progress`).
+    /// `blocked` says whether there's an end in a direction right now; it matters only before
+    /// the first tick into the wall, while the finger is still between the last item and the wall.
+    func overshoot(progress: Double, blocked: (TickDirection) -> Bool) -> Double {
+        if let direction, ticks > 0 {
+            return max(Double(ticks) + progress * Double(direction.sign), 0)
+        }
+        guard progress != 0 else { return 0 }
+        return blocked(progress > 0 ? .forward : .backward) ? abs(progress) : 0
+    }
+}
+
 /// Smoothed spin speed in ticks per second, used to accelerate scrubbing
 /// and sharpen scrub haptics.
 nonisolated struct TickRateMeter: Equatable {
