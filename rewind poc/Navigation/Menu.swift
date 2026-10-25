@@ -49,7 +49,7 @@ nonisolated struct MenuContext: Sendable {
     var cloudTracks: [Track] = []
     var cloudState: CloudState = .notConfigured
     var hasNowPlaying = false
-    var clickSound = false
+    var clickSound = true
     var haptics = true
     var shuffle = false
     var repeatMode = RepeatMode.off

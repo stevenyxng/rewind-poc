@@ -34,7 +34,7 @@ final class AppSettings {
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        clickSound = defaults.object(forKey: "clickSound") as? Bool ?? false
+        clickSound = defaults.object(forKey: "clickSound") as? Bool ?? true
         haptics = defaults.object(forKey: "haptics") as? Bool ?? true
         shuffle = defaults.object(forKey: "shuffle") as? Bool ?? false
         repeatMode = RepeatMode(rawValue: defaults.string(forKey: "repeatMode") ?? "") ?? .off
