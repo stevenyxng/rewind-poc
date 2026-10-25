@@ -79,6 +79,7 @@ final class AppModel {
                     haptics: settings.haptics,
                     shuffle: settings.shuffle,
                     repeatMode: settings.repeatMode,
+                    appearance: settings.appearance,
                     version: Self.version)
     }
 
@@ -247,6 +248,8 @@ final class AppModel {
 
     private func apply(_ toggle: SettingToggle) {
         switch toggle {
+        case .appearance:
+            settings.appearance = settings.appearance.next
         case .clickSound:
             settings.clickSound.toggle()
             clickSound.isEnabled = settings.clickSound

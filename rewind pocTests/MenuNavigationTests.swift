@@ -25,9 +25,20 @@ struct MenuNavigationTests {
         #expect(MenuBuilder.items(for: .music, context: context).map(\.title)
                 == ["Songs", "Artists", "Albums", "Local Files", "Cloud"])
         let settings = MenuBuilder.items(for: .settings, context: context).map(\.title)
-        for required in ["Click Sound", "Haptics", "Haptics Lab", "Import Files", "About"] {
+        for required in ["Appearance", "Click Sound", "Haptics", "Haptics Lab", "Import Files", "About"] {
             #expect(settings.contains(required))
         }
+    }
+
+    @Test func appearanceCyclesAndShowsInSettings() {
+        #expect(Appearance.system.next == .dark)
+        #expect(Appearance.dark.next == .light)
+        #expect(Appearance.light.next == .system)
+        var c = context
+        c.appearance = .dark
+        let row = MenuBuilder.items(for: .settings, context: c).first { $0.id == "appearance" }
+        #expect(row?.detail == "Dark")
+        #expect(row?.action == .toggle(.appearance))
     }
 
     @Test func cloudNotConfigured() {
