@@ -6,9 +6,10 @@ import Testing
 /// (the haptic itself can't be felt in tests, but the overshoot it's driven by can be read).
 @MainActor
 struct AppModelWallTests {
-    func makeModel() throws -> AppModel {
+    func makeModel(wall: Bool = true) throws -> AppModel {
         let defaults = try #require(UserDefaults(suiteName: "AppModelWallTests-\(UUID())"))
         defaults.set(false, forKey: "clickSound")
+        defaults.set(wall, forKey: "wallHaptic")
         let root = FileManager.default.temporaryDirectory.appending(path: "AppModelWallTests-\(UUID())")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         return AppModel(settings: AppSettings(defaults: defaults), haptics: HapticsEngine(defaults: defaults),
@@ -43,6 +44,25 @@ struct AppModelWallTests {
         #expect(model.haptics.wallOvershoot > 1)
         model.handle(.rotationEnded)                     // lifting the finger stops it
         #expect(model.haptics.wallOvershoot == 0)
+    }
+
+    @Test func wallIsOffByDefault() throws {
+        let defaults = try #require(UserDefaults(suiteName: "AppModelWallTests-\(UUID())"))
+        #expect(AppSettings(defaults: defaults).wall == false)
+    }
+
+    @Test func withTheWallOffTheEndIsAPlainStop() throws {
+        let model = try makeModel(wall: false)
+        let rows = model.navigator.items.count
+        model.handle(.touchDown(.next))
+        model.handle(.rotationBegan)
+        for _ in 1..<rows { model.handle(.tick(.forward, rate: 2)) }
+        model.handle(.tick(.forward, rate: 2))           // past the end
+        model.handle(.tick(.forward, rate: 2))
+        model.handle(.rotation(progress: 0.5))
+        #expect(model.haptics.wallOvershoot == 0)        // no wall
+        model.handle(.tick(.backward, rate: 2))          // nothing to unwind: moves right away
+        #expect(model.navigator.current.selected == rows - 2)
     }
 
     @Test func topOfTheListIsAWallToo() throws {

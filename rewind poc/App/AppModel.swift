@@ -74,6 +74,7 @@ final class AppModel {
                     hasNowPlaying: player.hasTrack,
                     clickSound: settings.clickSound,
                     haptics: settings.haptics,
+                    wall: settings.wall,
                     shuffle: settings.shuffle,
                     repeatMode: settings.repeatMode,
                     appearance: settings.appearance,
@@ -94,7 +95,8 @@ final class AppModel {
             wallPush.reset()
             if usesDetentRamp { haptics.beginRamp() }
         case .rotation(let progress):
-            let overshoot = wallPush.overshoot(progress: progress, blocked: isBlocked)
+            // With the wall off, the end of a list is a plain stop.
+            let overshoot = settings.wall ? wallPush.overshoot(progress: progress, blocked: isBlocked) : 0
             // Past the end there's no next detent to build tension toward; the wall takes over.
             if usesDetentRamp { haptics.updateRamp(progress: overshoot > 0 ? 0 : progress) }
             haptics.updateWall(overshoot: overshoot)
@@ -132,7 +134,7 @@ final class AppModel {
     }
 
     private func tick(_ direction: TickDirection, rate: Double) {
-        if wallPush.absorbs(direction) { return }
+        if settings.wall, wallPush.absorbs(direction) { return }
         switch navigator.screen {
         case .nowPlaying:
             scrubTick(direction, rate: rate)
@@ -259,6 +261,10 @@ final class AppModel {
         case .haptics:
             settings.haptics.toggle()
             haptics.isEnabled = settings.haptics
+        case .wall:
+            settings.wall.toggle()
+            haptics.endWall()
+            wallPush.reset()
         case .shuffle:
             settings.shuffle.toggle()
             player.setShuffle(settings.shuffle)

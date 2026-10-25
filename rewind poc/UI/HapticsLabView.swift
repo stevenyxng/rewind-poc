@@ -68,9 +68,14 @@ struct HapticsLabView: View {
     private var wallReadout: some View {
         let overshoot = haptics.wallOvershoot
         let intensity = HapticCurves.wallIntensity(overshoot: overshoot, tuning: haptics.tuning)
-        return Text(overshoot > 0
-                    ? String(format: "Wall: %.2f detents past end · intensity %.2f", overshoot, intensity)
-                    : "Wall: not pushing")
+        let text = if !model.settings.wall {
+            "Wall: off (turn on in Settings → Wall)"
+        } else if overshoot > 0 {
+            String(format: "Wall: %.2f detents past end · intensity %.2f", overshoot, intensity)
+        } else {
+            "Wall: not pushing"
+        }
+        return Text(text)
             .font(Theme.monoFont)
             .foregroundStyle(overshoot > 0 ? Theme.accent : Theme.secondary)
     }

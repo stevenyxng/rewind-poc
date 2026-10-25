@@ -1,6 +1,13 @@
 import CoreHaptics
 import UIKit
 
+/// Debug-only haptics trace, visible in Xcode's console or `devicectl ... --console`.
+nonisolated func hapticsLog(_ message: @autoclosure () -> String) {
+    #if DEBUG
+    print("[haptics] \(message())")
+    #endif
+}
+
 // MARK: - Tunable constants
 //
 // Every haptic in the app is shaped by the parameters in this table. The defaults
@@ -156,8 +163,8 @@ final class HapticsEngine {
     @ObservationIgnored let supportsCoreHaptics = CHHapticEngine.capabilitiesForHardware().supportsHaptics
     @ObservationIgnored private var engine: CHHapticEngine?
     @ObservationIgnored private var engineNeedsStart = true
-    @ObservationIgnored private let ramp = ContinuousHaptic()
-    @ObservationIgnored private let wallHaptic = ContinuousHaptic()
+    @ObservationIgnored private let ramp = ContinuousHaptic(name: "ramp")
+    @ObservationIgnored private let wallHaptic = ContinuousHaptic(name: "wall")
     /// Whole detents of the current wall push already given a fallback bump (no Core Haptics).
     @ObservationIgnored private var fallbackWallStep = 0
     @ObservationIgnored private let fallback = FallbackHaptics()
@@ -190,11 +197,13 @@ final class HapticsEngine {
                 e.playsHapticsOnly = true
                 e.isAutoShutdownEnabled = false
                 // Handlers run on a Core Haptics queue; hop to the main actor.
-                e.stoppedHandler = { @Sendable [weak self] _ in
+                e.stoppedHandler = { @Sendable [weak self] reason in
+                    hapticsLog("engine stopped, reason \(reason.rawValue)")
                     guard let self else { return }
                     Task { @MainActor in self.engineDidStop() }
                 }
                 e.resetHandler = { @Sendable [weak self] in
+                    hapticsLog("engine reset")
                     guard let self else { return }
                     Task { @MainActor in self.engineDidReset() }
                 }
@@ -395,51 +404,59 @@ final class HapticsEngine {
     }
 }
 
-/// A looping continuous haptic whose intensity is changed live (the detent ramp, the wall).
-/// Wraps one `CHHapticAdvancedPatternPlayer`; invalidated whenever the engine stops or resets.
+/// A continuous haptic whose intensity is changed live (the detent ramp, the wall).
+///
+/// Built like Apple's real-time haptics sample: one long continuous event at full intensity in
+/// an advanced player, scaled by `hapticIntensityControl`. Pattern-level dynamic parameters and
+/// looping are deliberately avoided: with them, the player ran without error but felt silent
+/// on device. A fresh player is made for each start, so sharpness can be set on the event.
 private final class ContinuousHaptic {
-    /// 30 s is the longest continuous event Core Haptics allows; the pattern loops.
-    private static let patternDuration: TimeInterval = 30
-    /// Intensity updates smaller than this are skipped...
+    /// Longer than any realistic push; when it runs out, the next update starts a new one.
+    private static let eventDuration: TimeInterval = 100
+    /// Intensity updates smaller than this are skipped.
     private static let epsilon = 0.01
-    /// ...unless this long has passed, which also recovers from the pattern's loop restart.
-    private static let refreshInterval: TimeInterval = 0.25
 
+    let name: String
     /// Whether the owner currently wants it running.
     var wanted = false
+    /// Debug: intensity sends left to log after a start.
+    private var sendsToLog = 0
+
+    init(name: String) {
+        self.name = name
+    }
+
     private(set) var isPlaying = false
     private var player: CHHapticAdvancedPatternPlayer?
     private var lastIntensity: Double = -1
-    private var lastSend: TimeInterval = 0
 
     /// Returns false if the player couldn't start; the engine likely needs restarting.
     func start(on engine: CHHapticEngine, sharpness: Double, intensity: Double) -> Bool {
+        stop()
         do {
-            if player == nil {
-                let event = CHHapticEvent(
-                    eventType: .hapticContinuous,
-                    parameters: [
-                        CHHapticEventParameter(parameterID: .hapticIntensity, value: 1),
-                        CHHapticEventParameter(parameterID: .hapticSharpness, value: 0.5),
-                    ],
-                    relativeTime: 0,
-                    duration: Self.patternDuration)
-                // Start silent so there's no blip before the first update.
-                let silent = CHHapticDynamicParameter(parameterID: .hapticIntensityControl, value: 0, relativeTime: 0)
-                let pattern = try CHHapticPattern(events: [event], parameters: [silent])
-                let newPlayer = try engine.makeAdvancedPlayer(with: pattern)
-                newPlayer.loopEnabled = true
-                player = newPlayer
+            let event = CHHapticEvent(
+                eventType: .hapticContinuous,
+                parameters: [
+                    CHHapticEventParameter(parameterID: .hapticIntensity, value: 1),
+                    CHHapticEventParameter(parameterID: .hapticSharpness, value: Float(sharpness)),
+                ],
+                relativeTime: 0,
+                duration: Self.eventDuration)
+            let newPlayer = try engine.makeAdvancedPlayer(with: CHHapticPattern(events: [event], parameters: []))
+            let id = ObjectIdentifier(newPlayer)
+            newPlayer.completionHandler = { @Sendable [weak self] _ in
+                guard let self else { return }
+                Task { @MainActor in self.playerFinished(id) }
             }
-            try player?.start(atTime: CHHapticTimeImmediate)
+            player = newPlayer
+            try newPlayer.start(atTime: CHHapticTimeImmediate)
             isPlaying = true
             lastIntensity = -1
-            // Sharpness is additive around the pattern's 0.5 base.
-            try player?.sendParameters([
-                CHHapticDynamicParameter(parameterID: .hapticSharpnessControl, value: Float(sharpness - 0.5), relativeTime: 0),
-            ], atTime: CHHapticTimeImmediate)
+            sendsToLog = 3
+            hapticsLog("\(name) started, sharpness \(sharpness), intensity \(intensity)")
             return setIntensity(intensity)
         } catch {
+            hapticsLog("\(name) start failed: \(error)")
             invalidate()
             return false
         }
@@ -449,23 +466,33 @@ private final class ContinuousHaptic {
     @discardableResult
     func setIntensity(_ value: Double) -> Bool {
         guard isPlaying, let player else { return true }
-        let now = ProcessInfo.processInfo.systemUptime
-        guard abs(value - lastIntensity) >= Self.epsilon || now - lastSend >= Self.refreshInterval else { return true }
+        guard abs(value - lastIntensity) >= Self.epsilon else { return true }
         do {
             try player.sendParameters([
                 CHHapticDynamicParameter(parameterID: .hapticIntensityControl, value: Float(value), relativeTime: 0),
             ], atTime: CHHapticTimeImmediate)
             lastIntensity = value
-            lastSend = now
+            if sendsToLog > 0 {
+                sendsToLog -= 1
+                hapticsLog("\(name) intensity \(value)")
+            }
             return true
         } catch {
+            hapticsLog("\(name) send failed: \(error)")
             invalidate()
             return false
         }
     }
 
+    /// The event ran out (or was stopped). If it's still the current player, the next update starts a new one.
+    private func playerFinished(_ id: ObjectIdentifier) {
+        guard let player, ObjectIdentifier(player) == id else { return }
+        isPlaying = false
+    }
+
     func stop() {
         guard isPlaying else { return }
+        hapticsLog("\(name) stopped")
         try? player?.stop(atTime: CHHapticTimeImmediate)
         isPlaying = false
     }
