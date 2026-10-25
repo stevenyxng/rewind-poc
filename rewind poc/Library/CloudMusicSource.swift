@@ -46,6 +46,11 @@ nonisolated struct CloudCache: Sendable {
         return FileManager.default.fileExists(atPath: url.path(percentEncoded: false)) ? url : nil
     }
 
+    /// Deletes the cached copy, e.g. because the file in Storage was replaced.
+    func remove(forPath path: String) {
+        try? FileManager.default.removeItem(at: fileURL(forPath: path))
+    }
+
     /// Downloads in the background; failures are ignored (we just stream next time).
     func store(remote: URL, forPath path: String) {
         let destination = fileURL(forPath: path)

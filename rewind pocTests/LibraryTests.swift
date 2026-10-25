@@ -88,6 +88,15 @@ struct LibraryIndexTests {
         #expect(cache.load() == entries)
     }
 
+    @Test func cloudCacheRemovesStaleCopy() throws {
+        let cache = CloudCache(folder: try tempDir())
+        try Data("old".utf8).write(to: cache.fileURL(forPath: "music/sub/a.mp3"))
+        #expect(cache.cachedFile(forPath: "music/sub/a.mp3") != nil)
+        cache.remove(forPath: "music/sub/a.mp3")
+        #expect(cache.cachedFile(forPath: "music/sub/a.mp3") == nil)
+        cache.remove(forPath: "music/never-cached.mp3")      // no-op, no crash
+    }
+
     @Test @MainActor func localLibraryImportAndDelete() async throws {
         let root = try tempDir()
         let source = try tempDir().appending(path: "Artist - Track.mp3")

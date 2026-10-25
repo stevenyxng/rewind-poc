@@ -107,11 +107,12 @@ final class FirebaseCloudSource: CloudMusicSource {
         if let known, known.stamp == stamp {
             entry = known
         } else if let stamp {
+            // New or replaced in Storage: any copy we cached when it was played is stale.
+            cache.remove(forPath: path)
+            // AVAsset fetches just the tag bytes it needs, not the whole song.
             var tags: TrackMetadata.Info?
-            if let local = cache.cachedFile(forPath: path) {
-                tags = await TrackMetadata.read(local)
-            } else if let remote = try? await ref.downloadURL() {
-                tags = await TrackMetadata.read(remote)   // AVAsset fetches just the tag bytes it needs
+            if let remote = try? await ref.downloadURL() {
+                tags = await TrackMetadata.read(remote)
             }
             // A failed read comes back empty; don't cache that, so the next refresh retries.
             if let tags, tags.title != nil || tags.artist != nil || tags.duration > 0 {
