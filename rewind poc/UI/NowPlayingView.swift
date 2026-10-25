@@ -80,7 +80,7 @@ private struct Artwork: View {
     }
 }
 
-/// Progress bar, or a scrubber with a diamond playhead in scrub mode.
+/// Progress bar, or a scrubber with a round playhead while scrubbing.
 private struct TimeBar: View {
     let position: Double
     let duration: Double
@@ -95,10 +95,9 @@ private struct TimeBar: View {
                     Capsule().fill(Theme.track).frame(height: 4)
                     Capsule().fill(scrubbing ? Theme.secondary : Theme.accent).frame(width: x, height: 4)
                     if scrubbing {
-                        Rectangle()
+                        Circle()
                             .fill(Theme.accent)
-                            .frame(width: 11, height: 11)
-                            .rotationEffect(.degrees(45))
+                            .frame(width: 12, height: 12)
                             .position(x: x, y: geo.size.height / 2)
                     }
                 }
