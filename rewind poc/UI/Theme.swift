@@ -14,12 +14,11 @@ enum Theme {
     /// The one accent: a quiet slate blue, used for progress fills and the playing glyph.
     static let accent       = dynamic(light: 0x4C6FA8, dark: 0x86A6D8)
 
-    /// Selected menu row: inverted, like a monochrome LCD.
+    /// Selected menu row: inverted colors.
     static let selectionFill = primary
     static let selectionText = display
 
     static let rowFont = Font.system(size: 17, weight: .regular)
-    static let titleFont = Font.system(size: 13, weight: .semibold)
     static let monoFont = Font.system(size: 12, weight: .regular, design: .monospaced)
 
     private static func dynamic(light: UInt32, dark: UInt32) -> Color {

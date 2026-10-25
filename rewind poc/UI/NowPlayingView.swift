@@ -1,58 +1,52 @@
 import SwiftUI
 
-/// Now Playing: track info, then a progress bar, a volume bar (while spinning in volume
-/// mode) or a scrubber (scrub mode).
+/// Now Playing: large artwork, title and artist, then a progress bar, a volume bar (while
+/// spinning in volume mode) or a scrubber (scrub mode).
 struct NowPlayingView: View {
     let model: AppModel
 
     private var player: PlaybackEngine { model.player }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 6) {
-                Text(player.queue.positionLabel)
-                Spacer()
-                if player.queue.isShuffled { Image(systemName: "shuffle") }
-                switch player.queue.repeatMode {
-                case .off: EmptyView()
-                case .all: Image(systemName: "repeat")
-                case .one: Image(systemName: "repeat.1")
-                }
-            }
-            .font(Theme.monoFont)
-            .foregroundStyle(Theme.secondary)
-            .padding(.bottom, 10)
+        VStack(alignment: .leading, spacing: 14) {
+            // Takes whatever height is left over, so the artwork is as large as fits.
+            Artwork(image: player.artwork)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            HStack(alignment: .top, spacing: 14) {
-                Artwork(image: player.artwork)
-                VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .center, spacing: 10) {
+                VStack(alignment: .leading, spacing: 2) {
                     Text(player.currentTrack?.title ?? "Not Playing")
-                        .font(.system(size: 18, weight: .semibold))
+                        .font(.system(size: 20, weight: .bold))
                         .foregroundStyle(Theme.primary)
-                        .lineLimit(2)
                     Text(player.currentTrack?.artist ?? "")
                         .font(.system(size: 15))
                         .foregroundStyle(Theme.secondary)
-                        .lineLimit(1)
-                    Text(player.currentTrack?.album ?? "")
-                        .font(.system(size: 15))
-                        .foregroundStyle(Theme.secondary)
-                        .lineLimit(1)
                 }
+                .lineLimit(1)
                 Spacer(minLength: 0)
+                HStack(spacing: 8) {
+                    if player.queue.isShuffled { Image(systemName: "shuffle") }
+                    switch player.queue.repeatMode {
+                    case .off: EmptyView()
+                    case .all: Image(systemName: "repeat")
+                    case .one: Image(systemName: "repeat.1")
+                    }
+                }
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(Theme.accent)
             }
 
-            Spacer(minLength: 8)
-
-            if let error = player.errorMessage {
-                Text(error)
-                    .font(.system(size: 13))
-                    .foregroundStyle(Theme.secondary)
-                    .padding(.bottom, 6)
+            VStack(alignment: .leading, spacing: 6) {
+                if let error = player.errorMessage {
+                    Text(error)
+                        .font(.system(size: 13))
+                        .foregroundStyle(Theme.secondary)
+                }
+                bottomBar
             }
-            bottomBar
         }
-        .padding(14)
+        .padding(.horizontal, 4)
+        .padding(.vertical, 8)
     }
 
     @ViewBuilder private var bottomBar: some View {
@@ -66,23 +60,25 @@ struct NowPlayingView: View {
     }
 }
 
+/// Square cover art, sized to fit the space it's given and centered in it.
 private struct Artwork: View {
     let image: UIImage?
 
     var body: some View {
-        Group {
-            if let image {
-                Image(uiImage: image).resizable().scaledToFill()
-            } else {
-                Image(systemName: "music.note")
-                    .font(.system(size: 26, weight: .light))
-                    .foregroundStyle(Theme.secondary)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(Theme.track)
+        Color.clear
+            .aspectRatio(1, contentMode: .fit)
+            .overlay {
+                if let image {
+                    Image(uiImage: image).resizable().scaledToFill()
+                } else {
+                    Image(systemName: "music.note")
+                        .font(.system(size: 64, weight: .light))
+                        .foregroundStyle(Theme.secondary)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .background(Theme.track)
+                }
             }
-        }
-        .frame(width: 84, height: 84)
-        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 }
 

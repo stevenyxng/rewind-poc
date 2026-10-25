@@ -82,7 +82,6 @@ final class AppModel {
                     version: Self.version)
     }
 
-    var title: String { MenuBuilder.title(for: navigator.screen, context: menuContext) }
 
     // MARK: Wheel events
 

@@ -60,28 +60,8 @@ nonisolated struct MenuContext: Sendable {
     }
 }
 
-/// Pure functions from (screen, context) to title and rows.
+/// Pure functions from (screen, context) to rows.
 nonisolated enum MenuBuilder {
-    static func title(for screen: Screen, context: MenuContext) -> String {
-        switch screen {
-        case .main: "re:wind"
-        case .music: "Music"
-        case .songs: "Songs"
-        case .artists: "Artists"
-        case .albums: "Albums"
-        case .artist(let name), .artistSongs(let name): name
-        case .album(let name): name
-        case .localFiles: "Local Files"
-        case .localTrack(let id): context.localTracks.first { $0.id == id }?.title ?? "Song"
-        case .confirmDelete: "Delete?"
-        case .cloud: "Cloud"
-        case .settings: "Settings"
-        case .hapticsLab: "Haptics Lab"
-        case .about: "About"
-        case .nowPlaying: "Now Playing"
-        }
-    }
-
     static func items(for screen: Screen, context c: MenuContext) -> [MenuItem] {
         switch screen {
         case .main:

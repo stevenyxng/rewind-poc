@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Classic iPod list: fixed-height rows, inverted selection bar, scroll indicator on the right.
+/// Fixed-height rows, a rounded selection highlight, scroll indicator on the right.
 struct MenuListView: View {
     let navigator: MenuNavigator
     let playingID: Track.ID?
@@ -62,7 +62,8 @@ struct MenuListView: View {
         .padding(.horizontal, 12)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         .foregroundStyle(selected ? Theme.selectionText : Theme.primary)
-        .background(selected ? Theme.selectionFill : .clear)
+        .background(selected ? Theme.selectionFill : .clear, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .padding(.vertical, 1)
     }
 }
 

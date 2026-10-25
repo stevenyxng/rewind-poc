@@ -1,7 +1,7 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// Portrait iPod layout: display on top (~45%), click wheel centered below.
+/// Portrait layout: menus / Now Playing on top, click wheel centered below.
 struct ContentView: View {
     @Bindable var model: AppModel
 
@@ -11,8 +11,10 @@ struct ContentView: View {
 
     var body: some View {
         GeometryReader { geo in
-            let displayHeight = geo.size.height * 0.45
-            let wheelSize = min(geo.size.width - 72, geo.size.height - displayHeight - 48)
+            // The wheel is sized first (it's capped by the width on most phones); the display
+            // takes everything above it, so Now Playing's artwork can be as large as possible.
+            let wheelSize = min(geo.size.width - 72, geo.size.height * 0.45)
+            let displayHeight = geo.size.height - wheelSize - 40
             VStack(spacing: 0) {
                 DisplayView(model: model)
                     .frame(height: displayHeight)
