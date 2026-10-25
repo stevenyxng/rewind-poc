@@ -52,6 +52,7 @@ struct HapticsLabView: View {
             Text("Spin the wheel to feel detents and walls")
                 .font(.system(size: 13))
                 .foregroundStyle(Theme.secondary)
+            wallReadout
             HStack(spacing: 3) {
                 ForEach(0..<AppModel.labDetentCount, id: \.self) { i in
                     RoundedRectangle(cornerRadius: 1.5)
@@ -60,6 +61,18 @@ struct HapticsLabView: View {
                 }
             }
         }
+    }
+
+    /// Live wall state while pushing past either end of the strip, to tell "too weak to feel"
+    /// apart from "not firing".
+    private var wallReadout: some View {
+        let overshoot = haptics.wallOvershoot
+        let intensity = HapticCurves.wallIntensity(overshoot: overshoot, tuning: haptics.tuning)
+        return Text(overshoot > 0
+                    ? String(format: "Wall: %.2f detents past end · intensity %.2f", overshoot, intensity)
+                    : "Wall: not pushing")
+            .font(Theme.monoFont)
+            .foregroundStyle(overshoot > 0 ? Theme.accent : Theme.secondary)
     }
 
     private var testButtons: some View {

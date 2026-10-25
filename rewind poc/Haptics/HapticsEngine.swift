@@ -43,11 +43,11 @@ nonisolated enum HapticParameter: String, CaseIterable, Identifiable, Sendable {
         case .detentIntensity:   Spec(label: "Click intensity", group: "Detent click", defaultValue: 0.85, range: 0...1)
         case .detentSharpness:   Spec(label: "Click sharpness", group: "Detent click", defaultValue: 0.90, range: 0...1)
 
-        case .wallStartIntensity: Spec(label: "Wall start intensity", group: "Wall", defaultValue: 0.10, range: 0...1)
-        case .wallMaxIntensity:  Spec(label: "Wall max intensity", group: "Wall", defaultValue: 0.90, range: 0...1)
-        case .wallFullDistance:  Spec(label: "Max at (detents past end)", group: "Wall", defaultValue: 3.0, range: 0.5...8)
-        case .wallCurve:         Spec(label: "Wall curve (exp)", group: "Wall", defaultValue: 1.5, range: 0.5...5)
-        case .wallSharpness:     Spec(label: "Wall sharpness",  group: "Wall", defaultValue: 0.10, range: 0...1)
+        case .wallStartIntensity: Spec(label: "Wall start intensity", group: "Wall", defaultValue: 0.40, range: 0...1)
+        case .wallMaxIntensity:  Spec(label: "Wall max intensity", group: "Wall", defaultValue: 1.00, range: 0...1)
+        case .wallFullDistance:  Spec(label: "Max at (detents past end)", group: "Wall", defaultValue: 2.0, range: 0.5...8)
+        case .wallCurve:         Spec(label: "Wall curve (exp)", group: "Wall", defaultValue: 1.0, range: 0.5...5)
+        case .wallSharpness:     Spec(label: "Wall sharpness",  group: "Wall", defaultValue: 0.35, range: 0...1)
 
         case .buttonIntensity:   Spec(label: "Button intensity", group: "Buttons", defaultValue: 0.60, range: 0...1)
         case .buttonSharpness:   Spec(label: "Button sharpness", group: "Buttons", defaultValue: 0.85, range: 0...1)
@@ -140,6 +140,9 @@ final class HapticsEngine {
     var tuning: HapticsTuning {
         didSet { if tuning != oldValue { tuning.save(to: defaults) } }
     }
+
+    /// How far past an end the wheel is being pushed, in detents (0 = not at a wall). Shown live in the Lab.
+    private(set) var wallOvershoot: Double = 0
 
     /// Master switch (Settings > Haptics).
     var isEnabled = true {
@@ -270,6 +273,7 @@ final class HapticsEngine {
     /// `overshoot` is how far the finger is past the endpoint, in detents. 0 stops the wall.
     func updateWall(overshoot: Double) {
         guard isEnabled, overshoot > 0 else { endWall(); return }
+        wallOvershoot = overshoot
         guard supportsCoreHaptics else {
             // No continuous haptics: a soft bump per whole detent pushed, stronger as it goes.
             let step = Int(overshoot)
@@ -289,6 +293,7 @@ final class HapticsEngine {
     }
 
     func endWall() {
+        if wallOvershoot != 0 { wallOvershoot = 0 }
         wallHaptic.wanted = false
         wallHaptic.stop()
         fallbackWallStep = 0
