@@ -3,7 +3,7 @@ import UIKit
 
 /// Reads tags and artwork from audio files (local or remote) with AVAsset.
 nonisolated enum TrackMetadata {
-    struct Info: Sendable {
+    struct Info: Codable, Equatable, Sendable {
         var title: String?
         var artist: String?
         var album: String?
@@ -29,6 +29,14 @@ nonisolated enum TrackMetadata {
               let item = AVMetadataItem.metadataItems(from: items, filteredByIdentifier: .commonIdentifierArtwork).first,
               let data = try? await item.load(.dataValue) else { return nil }
         return UIImage(data: data)
+    }
+
+    /// Storage custom metadata (`title`, `artist`, `album`, `duration`) wins over the file's own tags.
+    static func merge(custom: [String: String], tags: Info?) -> Info {
+        Info(title: custom["title"].nonEmpty ?? tags?.title,
+             artist: custom["artist"].nonEmpty ?? tags?.artist,
+             album: custom["album"].nonEmpty ?? tags?.album,
+             duration: Double(custom["duration"] ?? "") ?? tags?.duration ?? 0)
     }
 
     /// Builds a Track from file tags, falling back to the file name ("Artist - Title.mp3" is understood).

@@ -59,3 +59,30 @@ nonisolated struct CloudCache: Sendable {
         }
     }
 }
+
+/// Tags read from cloud files, kept in Caches/CloudMusic/tags.json so a refresh doesn't
+/// re-read every file over the network. An entry is reused only while its stamp matches.
+nonisolated struct CloudTagCache: Sendable {
+    struct Entry: Codable, Equatable, Sendable {
+        /// Changes when the file in Storage changes (its MD5 hash, or its upload time).
+        var stamp: String
+        var info: TrackMetadata.Info
+    }
+
+    let fileURL: URL
+
+    init(fileURL: URL = URL.cachesDirectory.appending(path: "CloudMusic/tags.json")) {
+        self.fileURL = fileURL
+    }
+
+    func load() -> [String: Entry] {
+        guard let data = try? Data(contentsOf: fileURL) else { return [:] }
+        return (try? JSONDecoder().decode([String: Entry].self, from: data)) ?? [:]
+    }
+
+    func save(_ entries: [String: Entry]) {
+        guard let data = try? JSONEncoder().encode(entries) else { return }
+        try? FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try? data.write(to: fileURL, options: .atomic)
+    }
+}

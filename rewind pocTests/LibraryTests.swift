@@ -72,6 +72,22 @@ struct LibraryIndexTests {
         #expect(t.album == "LP")
     }
 
+    @Test func cloudCustomMetadataOverridesTags() {
+        let tags = TrackMetadata.Info(title: "Tag Title", artist: "Tag Artist", album: "Tag Album", duration: 200)
+        let merged = TrackMetadata.merge(custom: ["artist": "Custom Artist", "title": " ", "duration": "241"], tags: tags)
+        #expect(merged == .init(title: "Tag Title", artist: "Custom Artist", album: "Tag Album", duration: 241))
+        #expect(TrackMetadata.merge(custom: [:], tags: tags) == tags)
+        #expect(TrackMetadata.merge(custom: [:], tags: nil) == .init(duration: 0))
+    }
+
+    @Test func cloudTagCacheRoundTrips() throws {
+        let cache = CloudTagCache(fileURL: try tempDir().appending(path: "sub/tags.json"))
+        #expect(cache.load().isEmpty)
+        let entries = ["music/a.mp3": CloudTagCache.Entry(stamp: "abc", info: .init(title: "A", artist: "B", album: nil, duration: 3))]
+        cache.save(entries)
+        #expect(cache.load() == entries)
+    }
+
     @Test @MainActor func localLibraryImportAndDelete() async throws {
         let root = try tempDir()
         let source = try tempDir().appending(path: "Artist - Track.mp3")
