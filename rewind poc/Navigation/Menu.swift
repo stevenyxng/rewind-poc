@@ -64,7 +64,7 @@ nonisolated struct MenuContext: Sendable {
 nonisolated enum MenuBuilder {
     static func title(for screen: Screen, context: MenuContext) -> String {
         switch screen {
-        case .main: "PodPlayer"
+        case .main: "re:wind"
         case .music: "Music"
         case .songs: "Songs"
         case .artists: "Artists"

@@ -1,7 +1,7 @@
 import SwiftUI
 
 @main
-struct PodPlayerApp: App {
+struct RewindApp: App {
     @State private var model = AppModel.live()
 
     var body: some Scene {
