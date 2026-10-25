@@ -53,9 +53,17 @@ final class PlaybackEngine {
     // MARK: Transport
 
     func play(_ tracks: [Track], startAt index: Int, shuffled: Bool, repeatMode: RepeatMode) {
+        let previous = queue.current
         queue.load(tracks, startAt: index, shuffled: shuffled)
         queue.repeatMode = repeatMode
         guard let track = queue.current else { return }
+        // Picking the song that's already loaded keeps its position (and resumes if paused);
+        // only the queue around it is replaced.
+        if track.id == previous?.id, player.currentItem != nil, errorMessage == nil {
+            if !isPlaying { play() }
+            updateNowPlayingInfo()
+            return
+        }
         load(track, autoplay: true)
     }
 
