@@ -92,7 +92,7 @@ final class AppModel {
             haptics.prepare()
             // The center button clicks on press-down (it can't become a spin). Ring buttons
             // click on release, once we know the touch wasn't the start of a spin.
-            if button == .center { haptics.button(.center) }
+            if button == .center { buttonClick(.center) }
         case .rotationBegan:
             if usesDetentRamp { haptics.beginRamp() }
         case .rotation(let progress):
@@ -104,7 +104,7 @@ final class AppModel {
         case .press(let button):
             press(button)
         case .holdBegan(let button):
-            haptics.button(button)
+            buttonClick(button)
             player.beginFastSeek(forward: button == .next)
         case .holdEnded:
             player.endFastSeek()
@@ -172,8 +172,14 @@ final class AppModel {
         }
     }
 
+    /// Button feedback: haptic plus the click sound (when it's on).
+    private func buttonClick(_ button: WheelButton) {
+        haptics.button(button)
+        clickSound.play()
+    }
+
     private func press(_ button: WheelButton) {
-        if button != .center { haptics.button(button) }
+        if button != .center { buttonClick(button) }
         switch button {
         case .menu:
             if navigator.screen == .nowPlaying { leaveNowPlayingModes() }
