@@ -88,9 +88,11 @@ struct LibraryIndexTests {
         #expect(Set(reopened.tracks) == Set(library.tracks))
 
         let victim = try #require(reopened.tracks.first)
+        // File names with spaces must resolve (URL.path() percent-encodes by default).
+        #expect(FileManager.default.fileExists(atPath: try #require(reopened.fileURL(for: victim)).path(percentEncoded: false)))
         try reopened.delete(victim.id)
         #expect(reopened.tracks.count == 1)
-        #expect(!FileManager.default.fileExists(atPath: try #require(reopened.fileURL(for: victim)).path()))
+        #expect(!FileManager.default.fileExists(atPath: try #require(reopened.fileURL(for: victim)).path(percentEncoded: false)))
     }
 
     @Test @MainActor func reconcilePicksUpAndDropsFiles() async throws {

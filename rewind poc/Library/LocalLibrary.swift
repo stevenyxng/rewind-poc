@@ -66,7 +66,7 @@ final class LocalLibrary {
 
     func delete(_ id: Track.ID) throws {
         guard let track = index.track(id: id), let url = fileURL(for: track) else { return }
-        if FileManager.default.fileExists(atPath: url.path()) {
+        if FileManager.default.fileExists(atPath: url.path(percentEncoded: false)) {
             try FileManager.default.removeItem(at: url)
         }
         index.remove(id: id)
@@ -81,7 +81,7 @@ final class LocalLibrary {
     }
 
     private func fileNames() -> [String] {
-        (try? FileManager.default.contentsOfDirectory(atPath: musicFolder.path())) ?? []
+        (try? FileManager.default.contentsOfDirectory(atPath: musicFolder.path(percentEncoded: false))) ?? []
     }
 
     private func save() {

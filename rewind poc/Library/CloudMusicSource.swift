@@ -43,7 +43,7 @@ nonisolated struct CloudCache: Sendable {
 
     func cachedFile(forPath path: String) -> URL? {
         let url = fileURL(forPath: path)
-        return FileManager.default.fileExists(atPath: url.path()) ? url : nil
+        return FileManager.default.fileExists(atPath: url.path(percentEncoded: false)) ? url : nil
     }
 
     /// Downloads in the background; failures are ignored (we just stream next time).

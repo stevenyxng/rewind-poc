@@ -56,6 +56,17 @@ final class AppModel {
     func start() async {
         await library.reconcile()
         navigator.clampCurrent()
+        #if DEBUG
+        // Screenshot/debug hook: launch with `-demoNowPlaying YES` to start the first song.
+        if UserDefaults.standard.bool(forKey: "demoNowPlaying"), !menuContext.allTracks.isEmpty {
+            perform(.play(menuContext.allTracks, index: 0))
+        }
+        // `-demoHapticsLab YES` opens Settings > Haptics Lab.
+        if UserDefaults.standard.bool(forKey: "demoHapticsLab") {
+            navigator.push(.settings)
+            navigator.push(.hapticsLab)
+        }
+        #endif
         await cloud.refresh()
     }
 
@@ -292,7 +303,7 @@ final class AppModel {
     private func playableURL(for track: Track) async throws -> URL {
         switch track.source {
         case .local:
-            guard let url = library.fileURL(for: track), FileManager.default.fileExists(atPath: url.path()) else {
+            guard let url = library.fileURL(for: track), FileManager.default.fileExists(atPath: url.path(percentEncoded: false)) else {
                 throw URLError(.fileDoesNotExist)
             }
             return url
