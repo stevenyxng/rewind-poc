@@ -17,9 +17,7 @@ nonisolated enum HapticParameter: String, CaseIterable, Identifiable, Sendable {
     case wallIntensity, wallSharpness, wallDuration
     // Buttons.
     case buttonIntensity, buttonSharpness, centerIntensity, centerSharpness
-    // Volume mode.
-    case volumeIntensityMin, volumeIntensityMax, volumeSharpness, volumeLimitIntensity, volumeLimitSharpness
-    // Scrub mode.
+    // Scrubbing in Now Playing.
     case scrubSpacing, scrubIntensity, scrubSharpnessMin, scrubSharpnessMax, scrubFastRate,
          scrubMarkIntensity, scrubMarkSharpness
 
@@ -53,11 +51,6 @@ nonisolated enum HapticParameter: String, CaseIterable, Identifiable, Sendable {
         case .centerIntensity:   Spec(label: "Center intensity", group: "Buttons", defaultValue: 0.80, range: 0...1)
         case .centerSharpness:   Spec(label: "Center sharpness", group: "Buttons", defaultValue: 0.70, range: 0...1)
 
-        case .volumeIntensityMin:   Spec(label: "Step at 0%",      group: "Volume", defaultValue: 0.15, range: 0...1)
-        case .volumeIntensityMax:   Spec(label: "Step at 100%",    group: "Volume", defaultValue: 0.75, range: 0...1)
-        case .volumeSharpness:      Spec(label: "Step sharpness",  group: "Volume", defaultValue: 0.50, range: 0...1)
-        case .volumeLimitIntensity: Spec(label: "Limit intensity", group: "Volume", defaultValue: 1.00, range: 0...1)
-        case .volumeLimitSharpness: Spec(label: "Limit sharpness", group: "Volume", defaultValue: 0.30, range: 0...1)
 
         case .scrubSpacing:       Spec(label: "Tick every (s)",  group: "Scrub", defaultValue: 3.0, range: 0.5...15)
         case .scrubIntensity:     Spec(label: "Tick intensity",  group: "Scrub", defaultValue: 0.45, range: 0...1)
@@ -112,12 +105,6 @@ nonisolated enum HapticCurves {
         guard p > onset else { return floor }
         let t = (p - onset) / (1 - onset)
         return floor + (tuning[.rampPeak] - floor) * pow(t, tuning[.rampCurve])
-    }
-
-    /// Volume step intensity: heavier as it gets louder.
-    static func volumeIntensity(level: Double, tuning: HapticsTuning) -> Double {
-        let l = min(max(level, 0), 1)
-        return tuning[.volumeIntensityMin] + (tuning[.volumeIntensityMax] - tuning[.volumeIntensityMin]) * l
     }
 
     /// Scrub tick sharpness: crisper as the spin gets faster.
@@ -351,25 +338,6 @@ final class HapticsEngine {
         } else {
             transient(tuning[.buttonIntensity], tuning[.buttonSharpness], fallback: .light)
         }
-    }
-
-    func volumeStep(level: Double) {
-        transient(HapticCurves.volumeIntensity(level: level, tuning: tuning), tuning[.volumeSharpness], fallback: .light)
-    }
-
-    /// Distinct firm bump at 0% and 100% volume.
-    func volumeLimit() {
-        let i = Float(tuning[.volumeLimitIntensity]), s = Float(tuning[.volumeLimitSharpness])
-        play(events: [
-            CHHapticEvent(eventType: .hapticTransient, parameters: [
-                CHHapticEventParameter(parameterID: .hapticIntensity, value: i),
-                CHHapticEventParameter(parameterID: .hapticSharpness, value: s),
-            ], relativeTime: 0),
-            CHHapticEvent(eventType: .hapticContinuous, parameters: [
-                CHHapticEventParameter(parameterID: .hapticIntensity, value: i * 0.6),
-                CHHapticEventParameter(parameterID: .hapticSharpness, value: s),
-            ], relativeTime: 0.01, duration: 0.04),
-        ], fallback: .heavy, fallbackIntensity: tuning[.volumeLimitIntensity])
     }
 
     /// Scrub tick; sharper the faster the wheel is spinning.

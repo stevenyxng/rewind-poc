@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// Now Playing: large artwork, title and artist, then a progress bar, a volume bar (while
-/// spinning in volume mode) or a scrubber (scrub mode).
+/// Now Playing: large artwork, title and artist, then a progress bar that becomes a
+/// scrubber while the wheel is turning.
 struct NowPlayingView: View {
     let model: AppModel
 
@@ -50,10 +50,8 @@ struct NowPlayingView: View {
     }
 
     @ViewBuilder private var bottomBar: some View {
-        if model.nowPlaying.mode == .scrub {
-            TimeBar(position: model.scrubPosition ?? player.currentTime, duration: player.duration, scrubbing: true)
-        } else if model.volumeBarVisible {
-            VolumeBar(volume: player.volume)
+        if let scrub = model.scrubPosition {
+            TimeBar(position: scrub, duration: player.duration, scrubbing: true)
         } else {
             TimeBar(position: player.currentTime, duration: player.duration, scrubbing: false)
         }
@@ -127,31 +125,5 @@ private struct TimeBar: View {
         return s >= 3600
             ? String(format: "%d:%02d:%02d", s / 3600, s / 60 % 60, s % 60)
             : String(format: "%d:%02d", s / 60, s % 60)
-    }
-}
-
-private struct VolumeBar: View {
-    let volume: Double
-
-    var body: some View {
-        VStack(spacing: 6) {
-            HStack(spacing: 10) {
-                Image(systemName: "speaker.fill")
-                GeometryReader { geo in
-                    ZStack(alignment: .leading) {
-                        Capsule().fill(Theme.track)
-                        Capsule().fill(Theme.accent).frame(width: geo.size.width * volume)
-                    }
-                }
-                .frame(height: 6)
-                Image(systemName: "speaker.wave.3.fill")
-            }
-            .frame(height: 14)
-            Text("\(Int((volume * 100).rounded()))%")
-                .font(Theme.monoFont)
-                .frame(maxWidth: .infinity)
-        }
-        .font(.system(size: 12))
-        .foregroundStyle(Theme.secondary)
     }
 }

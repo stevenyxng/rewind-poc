@@ -14,15 +14,6 @@ final class PlaybackEngine {
     private(set) var artwork: UIImage?
     private(set) var errorMessage: String?
 
-    /// The player's own volume, 0...1 (iOS has no public API for system volume). Persisted.
-    private(set) var volume: Double
-
-    func setVolume(_ value: Double) {
-        volume = min(max(value, 0), 1)
-        player.volume = Float(volume)
-        defaults.set(volume, forKey: Self.volumeKey)
-    }
-
     var currentTrack: Track? { queue.current }
     var hasTrack: Bool { queue.current != nil }
 
@@ -31,19 +22,14 @@ final class PlaybackEngine {
 
     /// Restart the current track instead of going back if we're past this point.
     static let restartThreshold: Double = 3
-    private static let volumeKey = "playerVolume"
 
     @ObservationIgnored private let player = AVPlayer()
-    @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private var loadToken = 0
     @ObservationIgnored private var fastSeekTask: Task<Void, Never>?
     @ObservationIgnored private var timeObserver: Any?
     @ObservationIgnored private var observers: [NSObjectProtocol] = []
 
-    init(defaults: UserDefaults = .standard) {
-        self.defaults = defaults
-        volume = defaults.object(forKey: Self.volumeKey) as? Double ?? 0.8
-        player.volume = Float(volume)
+    init() {
         configureSession()
         observePlayer()
         observeSession()

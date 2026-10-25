@@ -10,11 +10,8 @@ final class AppModel {
     let cloud: any CloudMusicSource
     let navigator = MenuNavigator()
 
-    private(set) var nowPlaying = NowPlayingWheelState()
-    /// Playhead while scrubbing (the player's own time lags behind seeks).
+    /// Playhead while scrubbing (the player's own time lags behind seeks); nil once the wheel settles.
     private(set) var scrubPosition: Double?
-    /// Volume bar shows briefly after the wheel changes volume, then the progress bar returns.
-    private(set) var volumeBarVisible = false
     /// Transient status line ("Imported 3 songs").
     private(set) var message: String?
     var showingImporter = false
@@ -25,8 +22,7 @@ final class AppModel {
 
     @ObservationIgnored let clickSound = ClickSound()
     @ObservationIgnored var clock: () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }
-    @ObservationIgnored private var scrubTimeoutTask: Task<Void, Never>?
-    @ObservationIgnored private var volumeBarTask: Task<Void, Never>?
+    @ObservationIgnored private var scrubSettleTask: Task<Void, Never>?
     @ObservationIgnored private var messageTask: Task<Void, Never>?
 
     init(settings: AppSettings, haptics: HapticsEngine, player: PlaybackEngine,
@@ -117,11 +113,7 @@ final class AppModel {
     private func tick(_ direction: TickDirection, rate: Double) {
         switch navigator.screen {
         case .nowPlaying:
-            nowPlaying.noteWheelInput(at: clock())
-            switch nowPlaying.mode {
-            case .volume: volumeTick(direction)
-            case .scrub: scrubTick(direction, rate: rate)
-            }
+            scrubTick(direction, rate: rate)
         case .hapticsLab:
             let target = labDetent + direction.sign
             if (0..<Self.labDetentCount).contains(target) {
@@ -142,20 +134,8 @@ final class AppModel {
         }
     }
 
-    private func volumeTick(_ direction: TickDirection) {
-        let (volume, feedback) = VolumeStepper.apply(direction, to: player.volume)
-        let changed = volume != player.volume
-        player.setVolume(volume)
-        switch feedback {
-        case .step(let level): haptics.volumeStep(level: level)
-        case .limit: haptics.volumeLimit()
-        }
-        if changed { clickSound.play() }
-        showVolumeBar()
-    }
-
     private func scrubTick(_ direction: TickDirection, rate: Double) {
-        scheduleScrubTimeout()
+        scheduleScrubSettle()
         guard player.hasTrack, player.duration > 0 else {
             haptics.wall()
             return
@@ -182,7 +162,7 @@ final class AppModel {
         if button != .center { buttonClick(button) }
         switch button {
         case .menu:
-            if navigator.screen == .nowPlaying { leaveNowPlayingModes() }
+            if navigator.screen == .nowPlaying { endScrub() }
             navigator.back()
         case .center:
             centerPressed()
@@ -198,14 +178,7 @@ final class AppModel {
     private func centerPressed() {
         switch navigator.screen {
         case .nowPlaying:
-            nowPlaying.pressCenter(at: clock())
-            if nowPlaying.mode == .scrub {
-                scrubPosition = player.currentTime
-                volumeBarVisible = false
-                scheduleScrubTimeout()
-            } else {
-                leaveNowPlayingModes()
-            }
+            player.togglePlayPause()
         case .hapticsLab:
             break
         default:
@@ -218,7 +191,7 @@ final class AppModel {
     func perform(_ action: MenuAction) {
         switch action {
         case .push(let screen):
-            if screen == .nowPlaying { leaveNowPlayingModes() }
+            if screen == .nowPlaying { endScrub() }
         case .play(let tracks, let index):
             player.play(tracks, startAt: index, shuffled: settings.shuffle, repeatMode: settings.repeatMode)
             openNowPlaying()
@@ -266,15 +239,14 @@ final class AppModel {
     }
 
     private func openNowPlaying() {
-        leaveNowPlayingModes()
+        endScrub()
         navigator.removeScreens { $0 == .nowPlaying }
         navigator.push(.nowPlaying)
     }
 
-    private func leaveNowPlayingModes() {
-        nowPlaying.reset()
+    private func endScrub() {
         scrubPosition = nil
-        scrubTimeoutTask?.cancel()
+        scrubSettleTask?.cancel()
     }
 
     private func delete(_ id: Track.ID) {
@@ -320,22 +292,12 @@ final class AppModel {
         }
     }
 
-    private func scheduleScrubTimeout() {
-        scrubTimeoutTask?.cancel()
-        scrubTimeoutTask = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(NowPlayingWheelState.scrubTimeout) + .milliseconds(50))
-            guard let self, !Task.isCancelled else { return }
-            if self.nowPlaying.expireIfIdle(at: self.clock()) { self.scrubPosition = nil }
-        }
-    }
-
-    private func showVolumeBar() {
-        volumeBarVisible = true
-        volumeBarTask?.cancel()
-        volumeBarTask = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(1.5))
+    private func scheduleScrubSettle() {
+        scrubSettleTask?.cancel()
+        scrubSettleTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(Scrubber.settleDelay))
             guard !Task.isCancelled else { return }
-            self?.volumeBarVisible = false
+            self?.scrubPosition = nil
         }
     }
 

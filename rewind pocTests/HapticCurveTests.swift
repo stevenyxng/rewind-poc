@@ -48,14 +48,6 @@ struct HapticCurveTests {
         #expect(HapticCurves.rampIntensity(progress: 5, tuning: tuning) == HapticCurves.rampIntensity(progress: 1, tuning: tuning))
     }
 
-    @Test func louderVolumeFeelsHeavier() {
-        let quiet = HapticCurves.volumeIntensity(level: 0.1, tuning: tuning)
-        let loud = HapticCurves.volumeIntensity(level: 0.9, tuning: tuning)
-        #expect(loud > quiet)
-        #expect(HapticCurves.volumeIntensity(level: 0, tuning: tuning) == tuning[.volumeIntensityMin])
-        #expect(HapticCurves.volumeIntensity(level: 1, tuning: tuning) == tuning[.volumeIntensityMax])
-    }
-
     @Test func fasterScrubIsSharper() {
         let slow = HapticCurves.scrubSharpness(rate: 1, tuning: tuning)
         let fast = HapticCurves.scrubSharpness(rate: 100, tuning: tuning)

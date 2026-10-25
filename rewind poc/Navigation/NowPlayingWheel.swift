@@ -1,55 +1,6 @@
 import Foundation
 
-/// Classic iPod Now Playing: the wheel adjusts volume; center switches to scrubbing;
-/// center again, or a few seconds without wheel input, switches back.
-nonisolated struct NowPlayingWheelState: Equatable, Sendable {
-    enum Mode: Equatable, Sendable { case volume, scrub }
-
-    static let scrubTimeout: TimeInterval = 3
-
-    private(set) var mode = Mode.volume
-    private(set) var lastInput: TimeInterval = 0
-
-    mutating func pressCenter(at now: TimeInterval) {
-        mode = mode == .volume ? .scrub : .volume
-        lastInput = now
-    }
-
-    mutating func noteWheelInput(at now: TimeInterval) {
-        lastInput = now
-    }
-
-    /// Drops back to volume mode after `scrubTimeout` without input. Returns true if it did.
-    mutating func expireIfIdle(at now: TimeInterval) -> Bool {
-        guard mode == .scrub, now - lastInput >= Self.scrubTimeout else { return false }
-        mode = .volume
-        return true
-    }
-
-    mutating func reset() {
-        mode = .volume
-    }
-}
-
-nonisolated enum VolumeStepper {
-    /// 32 steps from silent to full (about 1⅓ turns of the wheel).
-    static let step = 1.0 / 32
-
-    enum Feedback: Equatable, Sendable {
-        case step(level: Double)
-        /// At 0% or 100%, whether just arrived or pushing past.
-        case limit
-    }
-
-    static func apply(_ direction: TickDirection, to volume: Double) -> (volume: Double, feedback: Feedback) {
-        let raw = min(max(volume + Double(direction.sign) * step, 0), 1)
-        let snapped = (raw / step).rounded() * step
-        if snapped <= 0 { return (0, .limit) }
-        if snapped >= 1 { return (1, .limit) }
-        return (snapped, .step(level: snapped))
-    }
-}
-
+/// Now Playing: spinning the wheel scrubs through the track.
 nonisolated enum Scrubber {
     /// Seconds moved per tick when spinning slowly...
     static let baseSecondsPerTick = 1.0
@@ -59,6 +10,8 @@ nonisolated enum Scrubber {
     static let fullAccelerationRate = 20.0
     /// The stronger haptic marks every this many seconds.
     static let markInterval = 30.0
+    /// The scrub playhead hands back to the player's own time this long after the wheel stops.
+    static let settleDelay = 1.0
 
     enum Feedback: Equatable, Sendable {
         case none

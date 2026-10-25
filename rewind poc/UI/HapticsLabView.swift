@@ -68,9 +68,6 @@ struct HapticsLabView: View {
             testButton("Wall") { haptics.wall() }
             testButton("Button") { haptics.button(.menu) }
             testButton("Center") { haptics.button(.center) }
-            testButton("Vol 20%") { haptics.volumeStep(level: 0.2) }
-            testButton("Vol 90%") { haptics.volumeStep(level: 0.9) }
-            testButton("Vol limit") { haptics.volumeLimit() }
             testButton("Scrub slow") { haptics.scrubTick(rate: 2) }
             testButton("Scrub fast") { haptics.scrubTick(rate: 30) }
             testButton("30s mark") { haptics.scrubMark() }
