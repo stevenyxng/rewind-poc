@@ -9,6 +9,7 @@ final class AppModel {
     let library: LocalLibrary
     let cloud: any CloudMusicSource
     let navigator = MenuNavigator()
+    let tutorial = Tutorial()
 
     /// Playhead while scrubbing (the player's own time lags behind seeks); nil once the wheel settles.
     private(set) var scrubPosition: Double?
@@ -39,6 +40,7 @@ final class AppModel {
             MenuBuilder.items(for: screen, context: menuContext)
         }
         player.urlResolver = { [unowned self] track in try await playableURL(for: track) }
+        tutorial.onFinish = { [unowned self] in settings.tutorialSeen = true }
     }
 
     /// Production wiring. Firebase is only touched if GoogleService-Info.plist is bundled.
@@ -52,7 +54,10 @@ final class AppModel {
     func start() async {
         await library.reconcile()
         navigator.clampCurrent()
+        if !settings.tutorialSeen { startTutorial() }
         #if DEBUG
+        // `-showTutorial YES` replays the walkthrough on every launch.
+        if UserDefaults.standard.bool(forKey: "showTutorial") { startTutorial() }
         // Screenshot/debug hook: launch with `-demoNowPlaying YES` to start the first song.
         if UserDefaults.standard.bool(forKey: "demoNowPlaying"), !menuContext.allTracks.isEmpty {
             perform(.play(menuContext.allTracks, index: 0))
@@ -83,6 +88,7 @@ final class AppModel {
     // MARK: Wheel events
 
     func handle(_ event: WheelEvent) {
+        if tutorial.handle(event) { return }
         switch event {
         case .touchDown(let button):
             haptics.prepare()
@@ -202,6 +208,8 @@ final class AppModel {
             navigator.back()
         case .refreshCloud:
             Task { await cloud.refresh() }
+        case .startTutorial:
+            startTutorial()
         case .none:
             break
         }
@@ -224,6 +232,12 @@ final class AppModel {
             settings.repeatMode = settings.repeatMode.next
             player.setRepeat(settings.repeatMode)
         }
+    }
+
+    /// Starts the walkthrough from the main menu, where every step makes sense.
+    func startTutorial() {
+        navigator.pop(to: .main)
+        tutorial.start()
     }
 
     private func openNowPlaying() {

@@ -29,6 +29,7 @@ nonisolated enum MenuAction: Equatable, Sendable {
     case delete(Track.ID)
     case back
     case refreshCloud
+    case startTutorial
     case none
 }
 
@@ -160,6 +161,7 @@ nonisolated enum MenuBuilder {
                 MenuItem(id: "shuffle", title: "Shuffle", detail: onOff(c.shuffle), action: .toggle(.shuffle)),
                 MenuItem(id: "repeat", title: "Repeat", detail: c.repeatMode.label, action: .toggle(.repeatMode)),
                 MenuItem(id: "import", title: "Import Files", action: .importFiles),
+                MenuItem(id: "tutorial", title: "Tutorial", action: .startTutorial),
                 MenuItem(id: "about", title: "About", action: .push(.about)),
             ]
 

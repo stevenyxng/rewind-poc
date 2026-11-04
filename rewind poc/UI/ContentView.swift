@@ -18,14 +18,28 @@ struct ContentView: View {
             VStack(spacing: 0) {
                 DisplayView(model: model)
                     .frame(height: displayHeight)
+                    .tutorialAnchor(.display)
                     .padding(.horizontal, 16)
                     .padding(.top, 8)
                 Spacer(minLength: 0)
                 ClickWheelView { model.handle($0) }
                     .frame(width: wheelSize, height: wheelSize)
+                    .tutorialAnchor(.wheel)
                 Spacer(minLength: 0)
             }
             .frame(width: geo.size.width, height: geo.size.height)
+            .overlayPreferenceValue(TutorialAnchorKey.self) { anchors in
+                GeometryReader { proxy in
+                    if let step = model.tutorial.step,
+                       let display = anchors[.display], let wheel = anchors[.wheel] {
+                        TutorialOverlay(step: step, displayRect: proxy[display], wheelRect: proxy[wheel]) {
+                            model.tutorial.finish()
+                        }
+                        .transition(.opacity)
+                    }
+                }
+                .animation(.easeInOut(duration: 0.25), value: model.tutorial.isActive)
+            }
         }
         .background(Theme.background.ignoresSafeArea())
         .fileImporter(isPresented: $model.showingImporter, allowedContentTypes: Self.importTypes,

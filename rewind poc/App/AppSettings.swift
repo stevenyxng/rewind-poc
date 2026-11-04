@@ -29,6 +29,8 @@ final class AppSettings {
     var shuffle: Bool { didSet { defaults.set(shuffle, forKey: "shuffle") } }
     var repeatMode: RepeatMode { didSet { defaults.set(repeatMode.rawValue, forKey: "repeatMode") } }
     var appearance: Appearance { didSet { defaults.set(appearance.rawValue, forKey: "appearance") } }
+    /// First-launch tutorial has been finished or skipped.
+    var tutorialSeen: Bool { didSet { defaults.set(tutorialSeen, forKey: "tutorialSeen") } }
 
     @ObservationIgnored private let defaults: UserDefaults
 
@@ -39,5 +41,6 @@ final class AppSettings {
         shuffle = defaults.object(forKey: "shuffle") as? Bool ?? false
         repeatMode = RepeatMode(rawValue: defaults.string(forKey: "repeatMode") ?? "") ?? .off
         appearance = Appearance(rawValue: defaults.string(forKey: "appearance") ?? "") ?? .system
+        tutorialSeen = defaults.bool(forKey: "tutorialSeen")
     }
 }
