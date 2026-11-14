@@ -160,7 +160,7 @@ final class SpotifyManager: NSObject, @preconcurrency SPTAppRemoteDelegate, @pre
                 guard let self else { return }
                 self.commandPending = false
                 if let error {
-                    self.report("Spotify couldn't complete that control (code \((error as NSError).code)).")
+                    self.reportControlFailure(error, command: command)
                 } else {
                     self.errorMessage = nil
                     self.refreshPlayerState()
@@ -175,7 +175,37 @@ final class SpotifyManager: NSObject, @preconcurrency SPTAppRemoteDelegate, @pre
         }
     }
 
+    /// Check the account connected to the Spotify app, which may differ from Web API sign-in.
+    /// A command error alone does not establish that the user has a Free account.
+    private func reportControlFailure(_ error: Error, command: Command) {
+        let fallback = "Spotify couldn't complete that control (code \((error as NSError).code))."
+        guard case .previous = command, let userAPI = appRemote.userAPI else {
+            report(fallback)
+            return
+        }
+        let connection = connectionGeneration
+        commandPending = true
+        userAPI.fetchCapabilities(callback: { [weak self] result, capabilityError in
+            MainActor.assumeIsolated {
+                guard let self, self.isConnected,
+                      self.connectionGeneration == connection else { return }
+                self.commandPending = false
+                if capabilityError == nil,
+                   let capabilities = result as? SPTAppRemoteUserCapabilities,
+                   !capabilities.canPlayOnDemand {
+                    self.report("This action requires a Spotify Premium account")
+                } else {
+                    // Unknown account status and unrelated Premium errors retain the original message.
+                    self.report(fallback)
+                }
+            }
+        })
+    }
+
+    @ObservationIgnored private var connectionGeneration = UUID()
+
     private func clearConnection() {
+        connectionGeneration = UUID()
         isConnected = false
         isConnecting = false
         commandPending = false
