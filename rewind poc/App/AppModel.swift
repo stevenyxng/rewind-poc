@@ -10,6 +10,7 @@ final class AppModel {
     let cloud: any CloudMusicSource
     let navigator = MenuNavigator()
     let tutorial = Tutorial()
+    let spotifyManager = SpotifyManager()
 
     /// Playhead while scrubbing (the player's own time lags behind seeks); nil once the wheel settles.
     private(set) var scrubPosition: Double?
@@ -40,6 +41,7 @@ final class AppModel {
             MenuBuilder.items(for: screen, context: menuContext)
         }
         player.urlResolver = { [unowned self] track in try await playableURL(for: track) }
+        spotifyManager.onError = { [weak self] message in self?.show(message) }
         tutorial.onFinish = { [unowned self] in settings.tutorialSeen = true }
     }
 
@@ -103,7 +105,9 @@ final class AppModel {
             press(button)
         case .holdBegan(let button):
             buttonClick(button)
-            player.beginFastSeek(forward: button == .next)
+            if !spotifyManager.isConnected {
+                player.beginFastSeek(forward: button == .next)
+            }
         case .holdEnded:
             player.endFastSeek()
         }
@@ -130,6 +134,7 @@ final class AppModel {
     }
 
     private func scrubTick(_ direction: TickDirection, rate: Double) {
+        guard !spotifyManager.isConnected else { return }
         scheduleScrubSettle()
         guard player.hasTrack, player.duration > 0 else { return }
         let from = scrubPosition ?? player.currentTime
@@ -161,18 +166,22 @@ final class AppModel {
         case .center:
             centerPressed()
         case .playPause:
-            player.togglePlayPause()
+            if spotifyManager.isConnected { spotifyManager.perform(.togglePlayPause) }
+            else { player.togglePlayPause() }
         case .next:
-            player.nextTrack()
+            if spotifyManager.isConnected { spotifyManager.perform(.next) }
+            else { player.nextTrack() }
         case .previous:
-            player.previousTrack()
+            if spotifyManager.isConnected { spotifyManager.perform(.previous) }
+            else { player.previousTrack() }
         }
     }
 
     private func centerPressed() {
         switch navigator.screen {
         case .nowPlaying:
-            player.togglePlayPause()
+            if spotifyManager.isConnected { spotifyManager.perform(.togglePlayPause) }
+            else { player.togglePlayPause() }
         case .hapticsLab:
             break
         default:
@@ -208,6 +217,12 @@ final class AppModel {
             navigator.back()
         case .refreshCloud:
             Task { await cloud.refresh() }
+        case .connectSpotify:
+            Task {
+                if !(await spotifyManager.connect()) {
+                    show("Install Spotify on this device to connect.")
+                }
+            }
         case .startTutorial:
             startTutorial()
         case .none:

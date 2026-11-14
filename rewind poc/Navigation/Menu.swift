@@ -30,6 +30,7 @@ nonisolated enum MenuAction: Equatable, Sendable {
     case back
     case refreshCloud
     case startTutorial
+    case connectSpotify
     case none
 }
 
@@ -68,11 +69,9 @@ nonisolated enum MenuBuilder {
         switch screen {
         case .main:
             var items = [MenuItem(id: "music", title: "Music", action: .push(.music))]
-            if c.hasNowPlaying {
-                items.append(MenuItem(id: "nowPlaying", title: "Now Playing", action: .push(.nowPlaying)))
-            }
             items.append(MenuItem(id: "shuffle", title: "Shuffle Songs", action: .shuffleAll))
             items.append(MenuItem(id: "settings", title: "Settings", action: .push(.settings)))
+            items.append(MenuItem(id: "nowPlaying", title: "Currently Playing", action: .push(.nowPlaying)))
             return items
 
         case .music:
@@ -161,6 +160,7 @@ nonisolated enum MenuBuilder {
                 MenuItem(id: "shuffle", title: "Shuffle", detail: onOff(c.shuffle), action: .toggle(.shuffle)),
                 MenuItem(id: "repeat", title: "Repeat", detail: c.repeatMode.label, action: .toggle(.repeatMode)),
                 MenuItem(id: "import", title: "Import Files", action: .importFiles),
+                MenuItem(id: "spotify", title: "Connect to Spotify", action: .connectSpotify),
                 MenuItem(id: "tutorial", title: "Tutorial", action: .startTutorial),
                 MenuItem(id: "about", title: "About", action: .push(.about)),
             ]

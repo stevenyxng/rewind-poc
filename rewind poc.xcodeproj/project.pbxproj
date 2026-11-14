@@ -10,6 +10,8 @@
 		000000000000000300000001 /* FirebaseCore in Frameworks */ = {isa = PBXBuildFile; productRef = 000000000000000310000001 /* FirebaseCore */; };
 		000000000000000300000002 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = 000000000000000310000002 /* FirebaseAuth */; };
 		000000000000000300000003 /* FirebaseStorage in Frameworks */ = {isa = PBXBuildFile; productRef = 000000000000000310000003 /* FirebaseStorage */; };
+		096FE21B30A7BEEB003094D9 /* SpotifyiOS.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 096FE21930A7BCB3003094D9 /* SpotifyiOS.xcframework */; };
+		096FE21C30A7BEEB003094D9 /* SpotifyiOS.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 096FE21930A7BCB3003094D9 /* SpotifyiOS.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -22,9 +24,131 @@
 		};
 /* End PBXContainerItemProxy section */
 
+/* Begin PBXCopyFilesBuildPhase section */
+		096FE21D30A7BEEB003094D9 /* Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			dstPath = "";
+			dstSubfolder = Frameworks;
+			files = (
+				096FE21C30A7BEEB003094D9 /* SpotifyiOS.xcframework in Embed Frameworks */,
+			);
+			name = "Embed Frameworks";
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
 		000000000000000000000120 /* rewind poc.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "rewind poc.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		000000000000000000000220 /* rewind pocTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "rewind pocTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
+		096FE19330A7B8EE003094D9 /* rewind-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "rewind-Bridging-Header.h"; sourceTree = "<group>"; };
+		096FE19630A7BCB3003094D9 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		096FE19730A7BCB3003094D9 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		096FE19830A7BCB3003094D9 /* ConnectionStatusIndicatorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionStatusIndicatorView.swift; sourceTree = "<group>"; };
+		096FE19930A7BCB3003094D9 /* ContentCollectionViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentCollectionViewController.swift; sourceTree = "<group>"; };
+		096FE19A30A7BCB3003094D9 /* ContentItemCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentItemCell.swift; sourceTree = "<group>"; };
+		096FE19B30A7BCB3003094D9 /* host.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = host.entitlements; sourceTree = "<group>"; };
+		096FE19C30A7BCB3003094D9 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		096FE19D30A7BCB3003094D9 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
+		096FE19F30A7BCB3003094D9 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/Main.storyboard; sourceTree = "<group>"; };
+		096FE1A130A7BCB3003094D9 /* My-Extensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "My-Extensions.swift"; sourceTree = "<group>"; };
+		096FE1A230A7BCB3003094D9 /* PlaybackButtonGraphics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackButtonGraphics.swift; sourceTree = "<group>"; };
+		096FE1A330A7BCB3003094D9 /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
+		096FE1A430A7BCB3003094D9 /* SpeedPickerViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeedPickerViewController.swift; sourceTree = "<group>"; };
+		096FE1A530A7BCB3003094D9 /* ViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewController.swift; sourceTree = "<group>"; };
+		096FE1A730A7BCB3003094D9 /* project.yml */ = {isa = PBXFileReference; lastKnownFileType = text.yaml; path = project.yml; sourceTree = "<group>"; };
+		096FE1A830A7BCB3003094D9 /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
+		096FE1AA30A7BCB3003094D9 /* AppDelegate.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AppDelegate.h; sourceTree = "<group>"; };
+		096FE1AB30A7BCB3003094D9 /* AppDelegate.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AppDelegate.m; sourceTree = "<group>"; };
+		096FE1AC30A7BCB3003094D9 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		096FE1AD30A7BCB3003094D9 /* ConnectButton.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ConnectButton.h; sourceTree = "<group>"; };
+		096FE1AE30A7BCB3003094D9 /* ConnectButton.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ConnectButton.m; sourceTree = "<group>"; };
+		096FE1AF30A7BCB3003094D9 /* ConnectView.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ConnectView.h; sourceTree = "<group>"; };
+		096FE1B030A7BCB3003094D9 /* ConnectView.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ConnectView.m; sourceTree = "<group>"; };
+		096FE1B130A7BCB3003094D9 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		096FE1B230A7BCB3003094D9 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
+		096FE1B430A7BCB3003094D9 /* main.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = main.m; sourceTree = "<group>"; };
+		096FE1B530A7BCB3003094D9 /* SceneDelegate.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = SceneDelegate.h; sourceTree = "<group>"; };
+		096FE1B630A7BCB3003094D9 /* SceneDelegate.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = SceneDelegate.m; sourceTree = "<group>"; };
+		096FE1B730A7BCB3003094D9 /* ViewController.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ViewController.h; sourceTree = "<group>"; };
+		096FE1B830A7BCB3003094D9 /* ViewController.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ViewController.m; sourceTree = "<group>"; };
+		096FE1BA30A7BCB3003094D9 /* project.yml */ = {isa = PBXFileReference; lastKnownFileType = text.yaml; path = project.yml; sourceTree = "<group>"; };
+		096FE1BB30A7BCB3003094D9 /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
+		096FE1BD30A7BCB3003094D9 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		096FE1BE30A7BCB3003094D9 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		096FE1BF30A7BCB3003094D9 /* ConnectButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectButton.swift; sourceTree = "<group>"; };
+		096FE1C030A7BCB3003094D9 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		096FE1C130A7BCB3003094D9 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
+		096FE1C330A7BCB3003094D9 /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
+		096FE1C430A7BCB3003094D9 /* ViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewController.swift; sourceTree = "<group>"; };
+		096FE1C630A7BCB3003094D9 /* project.yml */ = {isa = PBXFileReference; lastKnownFileType = text.yaml; path = project.yml; sourceTree = "<group>"; };
+		096FE1C730A7BCB3003094D9 /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
+		096FE1C930A7BCB3003094D9 /* .ruby-version */ = {isa = PBXFileReference; lastKnownFileType = text; path = ".ruby-version"; sourceTree = "<group>"; };
+		096FE1CA30A7BCB3003094D9 /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
+		096FE1CB30A7BCB3003094D9 /* spotify_token_swap.rb */ = {isa = PBXFileReference; lastKnownFileType = text.script.ruby; path = spotify_token_swap.rb; sourceTree = "<group>"; };
+		096FE1CD30A7BCB3003094D9 /* SPTAppRemoteCallback.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = SPTAppRemoteCallback.html; sourceTree = "<group>"; };
+		096FE1CF30A7BCB3003094D9 /* SPTAppRemote.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = SPTAppRemote.html; sourceTree = "<group>"; };
+		096FE1D030A7BCB3003094D9 /* SPTAppRemoteConnectionParams.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = SPTAppRemoteConnectionParams.html; sourceTree = "<group>"; };
+		096FE1D130A7BCB3003094D9 /* SPTConfiguration.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = SPTConfiguration.html; sourceTree = "<group>"; };
+		096FE1D230A7BCB3003094D9 /* SPTError.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = SPTError.html; sourceTree = "<group>"; };
+		096FE1D330A7BCB3003094D9 /* SPTSession.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = SPTSession.html; sourceTree = "<group>"; };
+		096FE1D430A7BCB3003094D9 /* SPTSessionManager.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = SPTSessionManager.html; sourceTree = "<group>"; };
+		096FE1D630A7BCB3003094D9 /* SPTAppRemoteConnectionParamsImageFormat.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = SPTAppRemoteConnectionParamsImageFormat.html; sourceTree = "<group>"; };
+		096FE1D730A7BCB3003094D9 /* SPTAppRemoteErrorCode.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = SPTAppRemoteErrorCode.html; sourceTree = "<group>"; };
+		096FE1D830A7BCB3003094D9 /* SPTAppRemoteLogLevel.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = SPTAppRemoteLogLevel.html; sourceTree = "<group>"; };
+		096FE1D930A7BCB3003094D9 /* SPTAppRemotePlaybackOptionsRepeatMode.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = SPTAppRemotePlaybackOptionsRepeatMode.html; sourceTree = "<group>"; };
+		096FE1DA30A7BCB3003094D9 /* SPTAuthorizationOptions.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = SPTAuthorizationOptions.html; sourceTree = "<group>"; };
+		096FE1DB30A7BCB3003094D9 /* SPTErrorCode.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = SPTErrorCode.html; sourceTree = "<group>"; };
+		096FE1DC30A7BCB3003094D9 /* SPTScope.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = SPTScope.html; sourceTree = "<group>"; };
+		096FE1DE30A7BCB3003094D9 /* _index.scss */ = {isa = PBXFileReference; lastKnownFileType = text; path = _index.scss; sourceTree = "<group>"; };
+		096FE1DF30A7BCB3003094D9 /* _layout.scss */ = {isa = PBXFileReference; lastKnownFileType = text; path = _layout.scss; sourceTree = "<group>"; };
+		096FE1E030A7BCB3003094D9 /* _normalize.scss */ = {isa = PBXFileReference; lastKnownFileType = text; path = _normalize.scss; sourceTree = "<group>"; };
+		096FE1E130A7BCB3003094D9 /* _object.scss */ = {isa = PBXFileReference; lastKnownFileType = text; path = _object.scss; sourceTree = "<group>"; };
+		096FE1E230A7BCB3003094D9 /* _print.scss */ = {isa = PBXFileReference; lastKnownFileType = text; path = _print.scss; sourceTree = "<group>"; };
+		096FE1E330A7BCB3003094D9 /* _variables.scss */ = {isa = PBXFileReference; lastKnownFileType = text; path = _variables.scss; sourceTree = "<group>"; };
+		096FE1E430A7BCB3003094D9 /* _xcode.scss */ = {isa = PBXFileReference; lastKnownFileType = text; path = _xcode.scss; sourceTree = "<group>"; };
+		096FE1E530A7BCB3003094D9 /* style.scss */ = {isa = PBXFileReference; lastKnownFileType = text; path = style.scss; sourceTree = "<group>"; };
+		096FE1E730A7BCB3003094D9 /* style.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; path = style.css; sourceTree = "<group>"; };
+		096FE1E930A7BCB3003094D9 /* button_bar_background.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = button_bar_background.png; sourceTree = "<group>"; };
+		096FE1EA30A7BCB3003094D9 /* disclosure.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = disclosure.png; sourceTree = "<group>"; };
+		096FE1EB30A7BCB3003094D9 /* disclosure_open.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = disclosure_open.png; sourceTree = "<group>"; };
+		096FE1EC30A7BCB3003094D9 /* library_background.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = library_background.png; sourceTree = "<group>"; };
+		096FE1ED30A7BCB3003094D9 /* title_background.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = title_background.png; sourceTree = "<group>"; };
+		096FE1EF30A7BCB3003094D9 /* script.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = script.js; sourceTree = "<group>"; };
+		096FE1F130A7BCB3003094D9 /* SPTAppRemoteAlbum.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = SPTAppRemoteAlbum.html; sourceTree = "<group>"; };
+		096FE1F230A7BCB3003094D9 /* SPTAppRemoteArtist.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = SPTAppRemoteArtist.html; sourceTree = "<group>"; };
+		096FE1F330A7BCB3003094D9 /* SPTAppRemoteConnectivityAPI.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = SPTAppRemoteConnectivityAPI.html; sourceTree = "<group>"; };
+		096FE1F430A7BCB3003094D9 /* SPTAppRemoteConnectivityAPIDelegate.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = SPTAppRemoteConnectivityAPIDelegate.html; sourceTree = "<group>"; };
+		096FE1F530A7BCB3003094D9 /* SPTAppRemoteConnectivityState.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = SPTAppRemoteConnectivityState.html; sourceTree = "<group>"; };
+		096FE1F630A7BCB3003094D9 /* SPTAppRemoteContentAPI.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = SPTAppRemoteContentAPI.html; sourceTree = "<group>"; };
+		096FE1F730A7BCB3003094D9 /* SPTAppRemoteContentItem.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = SPTAppRemoteContentItem.html; sourceTree = "<group>"; };
+		096FE1F830A7BCB3003094D9 /* SPTAppRemoteCrossfadeState.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = SPTAppRemoteCrossfadeState.html; sourceTree = "<group>"; };
+		096FE1F930A7BCB3003094D9 /* SPTAppRemoteDelegate.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = SPTAppRemoteDelegate.html; sourceTree = "<group>"; };
+		096FE1FA30A7BCB3003094D9 /* SPTAppRemoteImageAPI.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = SPTAppRemoteImageAPI.html; sourceTree = "<group>"; };
+		096FE1FB30A7BCB3003094D9 /* SPTAppRemoteImageRepresentable.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = SPTAppRemoteImageRepresentable.html; sourceTree = "<group>"; };
+		096FE1FC30A7BCB3003094D9 /* SPTAppRemoteLibraryState.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = SPTAppRemoteLibraryState.html; sourceTree = "<group>"; };
+		096FE1FD30A7BCB3003094D9 /* SPTAppRemotePlaybackOptions.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = SPTAppRemotePlaybackOptions.html; sourceTree = "<group>"; };
+		096FE1FE30A7BCB3003094D9 /* SPTAppRemotePlaybackRestrictions.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = SPTAppRemotePlaybackRestrictions.html; sourceTree = "<group>"; };
+		096FE1FF30A7BCB3003094D9 /* SPTAppRemotePlayerAPI.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = SPTAppRemotePlayerAPI.html; sourceTree = "<group>"; };
+		096FE20030A7BCB3003094D9 /* SPTAppRemotePlayerState.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = SPTAppRemotePlayerState.html; sourceTree = "<group>"; };
+		096FE20130A7BCB3003094D9 /* SPTAppRemotePlayerStateDelegate.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = SPTAppRemotePlayerStateDelegate.html; sourceTree = "<group>"; };
+		096FE20230A7BCB3003094D9 /* SPTAppRemotePodcastPlaybackSpeed.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = SPTAppRemotePodcastPlaybackSpeed.html; sourceTree = "<group>"; };
+		096FE20330A7BCB3003094D9 /* SPTAppRemoteTrack.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = SPTAppRemoteTrack.html; sourceTree = "<group>"; };
+		096FE20430A7BCB3003094D9 /* SPTAppRemoteUserAPI.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = SPTAppRemoteUserAPI.html; sourceTree = "<group>"; };
+		096FE20530A7BCB3003094D9 /* SPTAppRemoteUserAPIDelegate.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = SPTAppRemoteUserAPIDelegate.html; sourceTree = "<group>"; };
+		096FE20630A7BCB3003094D9 /* SPTAppRemoteUserCapabilities.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = SPTAppRemoteUserCapabilities.html; sourceTree = "<group>"; };
+		096FE20730A7BCB3003094D9 /* SPTSessionManagerDelegate.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = SPTSessionManagerDelegate.html; sourceTree = "<group>"; };
+		096FE20930A7BCB3003094D9 /* hierarchy.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = hierarchy.html; sourceTree = "<group>"; };
+		096FE20A30A7BCB3003094D9 /* index.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = index.html; sourceTree = "<group>"; };
+		096FE20C30A7BCB3003094D9 /* auth.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = auth.md; sourceTree = "<group>"; };
+		096FE20E30A7BCB3003094D9 /* import_sdk.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = import_sdk.png; sourceTree = "<group>"; };
+		096FE20F30A7BCB3003094D9 /* info_plist.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = info_plist.png; sourceTree = "<group>"; };
+		096FE21030A7BCB3003094D9 /* xcframework-import.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "xcframework-import.png"; sourceTree = "<group>"; };
+		096FE21230A7BCB3003094D9 /* MPMessagePack-LICENSE.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = "MPMessagePack-LICENSE.md"; sourceTree = "<group>"; };
+		096FE21430A7BCB3003094D9 /* .gitignore */ = {isa = PBXFileReference; lastKnownFileType = text; path = .gitignore; sourceTree = "<group>"; };
+		096FE21530A7BCB3003094D9 /* catalog-info.yaml */ = {isa = PBXFileReference; lastKnownFileType = text.yaml; path = "catalog-info.yaml"; sourceTree = "<group>"; };
+		096FE21630A7BCB3003094D9 /* CHANGELOG.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = CHANGELOG.md; sourceTree = "<group>"; };
+		096FE21730A7BCB3003094D9 /* Package.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Package.swift; sourceTree = "<group>"; };
+		096FE21830A7BCB3003094D9 /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
+		096FE21930A7BCB3003094D9 /* SpotifyiOS.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; path = SpotifyiOS.xcframework; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -47,6 +171,7 @@
 				000000000000000300000001 /* FirebaseCore in Frameworks */,
 				000000000000000300000002 /* FirebaseAuth in Frameworks */,
 				000000000000000300000003 /* FirebaseStorage in Frameworks */,
+				096FE21B30A7BEEB003094D9 /* SpotifyiOS.xcframework in Frameworks */,
 			);
 		};
 		000000000000000230000000 /* Frameworks */ = {
@@ -62,7 +187,10 @@
 			children = (
 				000000000000000000000010 /* rewind poc */,
 				000000000000000000000011 /* rewind pocTests */,
+				096FE19030A70370003094D9 /* Frameworks */,
+				096FE21A30A7BCB3003094D9 /* ios-sdk-5.0.1 */,
 				000000000000000000000020 /* Products */,
+				096FE19330A7B8EE003094D9 /* rewind-Bridging-Header.h */,
 			);
 			sourceTree = "<group>";
 		};
@@ -75,6 +203,281 @@
 			name = Products;
 			sourceTree = "<group>";
 		};
+		096FE19030A70370003094D9 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				096FE21930A7BCB3003094D9 /* SpotifyiOS.xcframework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		096FE1A630A7BCB3003094D9 /* NowPlayingView */ = {
+			isa = PBXGroup;
+			children = (
+				096FE19630A7BCB3003094D9 /* AppDelegate.swift */,
+				096FE19730A7BCB3003094D9 /* Assets.xcassets */,
+				096FE19830A7BCB3003094D9 /* ConnectionStatusIndicatorView.swift */,
+				096FE19930A7BCB3003094D9 /* ContentCollectionViewController.swift */,
+				096FE19A30A7BCB3003094D9 /* ContentItemCell.swift */,
+				096FE19B30A7BCB3003094D9 /* host.entitlements */,
+				096FE19C30A7BCB3003094D9 /* Info.plist */,
+				096FE19E30A7BCB3003094D9 /* LaunchScreen.storyboard */,
+				096FE1A030A7BCB3003094D9 /* Main.storyboard */,
+				096FE1A130A7BCB3003094D9 /* My-Extensions.swift */,
+				096FE1A230A7BCB3003094D9 /* PlaybackButtonGraphics.swift */,
+				096FE1A330A7BCB3003094D9 /* SceneDelegate.swift */,
+				096FE1A430A7BCB3003094D9 /* SpeedPickerViewController.swift */,
+				096FE1A530A7BCB3003094D9 /* ViewController.swift */,
+			);
+			path = NowPlayingView;
+			sourceTree = "<group>";
+		};
+		096FE1A930A7BCB3003094D9 /* NowPlayingView */ = {
+			isa = PBXGroup;
+			children = (
+				096FE1A630A7BCB3003094D9 /* NowPlayingView */,
+				096FE1A730A7BCB3003094D9 /* project.yml */,
+				096FE1A830A7BCB3003094D9 /* README.md */,
+			);
+			path = NowPlayingView;
+			sourceTree = "<group>";
+		};
+		096FE1B930A7BCB3003094D9 /* SPTLoginSampleAppObjc */ = {
+			isa = PBXGroup;
+			children = (
+				096FE1AA30A7BCB3003094D9 /* AppDelegate.h */,
+				096FE1AB30A7BCB3003094D9 /* AppDelegate.m */,
+				096FE1AC30A7BCB3003094D9 /* Assets.xcassets */,
+				096FE1AD30A7BCB3003094D9 /* ConnectButton.h */,
+				096FE1AE30A7BCB3003094D9 /* ConnectButton.m */,
+				096FE1AF30A7BCB3003094D9 /* ConnectView.h */,
+				096FE1B030A7BCB3003094D9 /* ConnectView.m */,
+				096FE1B130A7BCB3003094D9 /* Info.plist */,
+				096FE1B330A7BCB3003094D9 /* LaunchScreen.storyboard */,
+				096FE1B430A7BCB3003094D9 /* main.m */,
+				096FE1B530A7BCB3003094D9 /* SceneDelegate.h */,
+				096FE1B630A7BCB3003094D9 /* SceneDelegate.m */,
+				096FE1B730A7BCB3003094D9 /* ViewController.h */,
+				096FE1B830A7BCB3003094D9 /* ViewController.m */,
+			);
+			path = SPTLoginSampleAppObjc;
+			sourceTree = "<group>";
+		};
+		096FE1BC30A7BCB3003094D9 /* SPTLoginSampleAppObjc */ = {
+			isa = PBXGroup;
+			children = (
+				096FE1B930A7BCB3003094D9 /* SPTLoginSampleAppObjc */,
+				096FE1BA30A7BCB3003094D9 /* project.yml */,
+				096FE1BB30A7BCB3003094D9 /* README.md */,
+			);
+			path = SPTLoginSampleAppObjc;
+			sourceTree = "<group>";
+		};
+		096FE1C530A7BCB3003094D9 /* SPTLoginSampleAppSwift */ = {
+			isa = PBXGroup;
+			children = (
+				096FE1BD30A7BCB3003094D9 /* AppDelegate.swift */,
+				096FE1BE30A7BCB3003094D9 /* Assets.xcassets */,
+				096FE1BF30A7BCB3003094D9 /* ConnectButton.swift */,
+				096FE1C030A7BCB3003094D9 /* Info.plist */,
+				096FE1C230A7BCB3003094D9 /* LaunchScreen.storyboard */,
+				096FE1C330A7BCB3003094D9 /* SceneDelegate.swift */,
+				096FE1C430A7BCB3003094D9 /* ViewController.swift */,
+			);
+			path = SPTLoginSampleAppSwift;
+			sourceTree = "<group>";
+		};
+		096FE1C830A7BCB3003094D9 /* SPTLoginSampleAppSwift */ = {
+			isa = PBXGroup;
+			children = (
+				096FE1C530A7BCB3003094D9 /* SPTLoginSampleAppSwift */,
+				096FE1C630A7BCB3003094D9 /* project.yml */,
+				096FE1C730A7BCB3003094D9 /* README.md */,
+			);
+			path = SPTLoginSampleAppSwift;
+			sourceTree = "<group>";
+		};
+		096FE1CC30A7BCB3003094D9 /* DemoProjects */ = {
+			isa = PBXGroup;
+			children = (
+				096FE1A930A7BCB3003094D9 /* NowPlayingView */,
+				096FE1BC30A7BCB3003094D9 /* SPTLoginSampleAppObjc */,
+				096FE1C830A7BCB3003094D9 /* SPTLoginSampleAppSwift */,
+				096FE1C930A7BCB3003094D9 /* .ruby-version */,
+				096FE1CA30A7BCB3003094D9 /* README.md */,
+				096FE1CB30A7BCB3003094D9 /* spotify_token_swap.rb */,
+			);
+			path = DemoProjects;
+			sourceTree = "<group>";
+		};
+		096FE1CE30A7BCB3003094D9 /* Blocks */ = {
+			isa = PBXGroup;
+			children = (
+				096FE1CD30A7BCB3003094D9 /* SPTAppRemoteCallback.html */,
+			);
+			path = Blocks;
+			sourceTree = "<group>";
+		};
+		096FE1D530A7BCB3003094D9 /* Classes */ = {
+			isa = PBXGroup;
+			children = (
+				096FE1CF30A7BCB3003094D9 /* SPTAppRemote.html */,
+				096FE1D030A7BCB3003094D9 /* SPTAppRemoteConnectionParams.html */,
+				096FE1D130A7BCB3003094D9 /* SPTConfiguration.html */,
+				096FE1D230A7BCB3003094D9 /* SPTError.html */,
+				096FE1D330A7BCB3003094D9 /* SPTSession.html */,
+				096FE1D430A7BCB3003094D9 /* SPTSessionManager.html */,
+			);
+			path = Classes;
+			sourceTree = "<group>";
+		};
+		096FE1DD30A7BCB3003094D9 /* Constants */ = {
+			isa = PBXGroup;
+			children = (
+				096FE1D630A7BCB3003094D9 /* SPTAppRemoteConnectionParamsImageFormat.html */,
+				096FE1D730A7BCB3003094D9 /* SPTAppRemoteErrorCode.html */,
+				096FE1D830A7BCB3003094D9 /* SPTAppRemoteLogLevel.html */,
+				096FE1D930A7BCB3003094D9 /* SPTAppRemotePlaybackOptionsRepeatMode.html */,
+				096FE1DA30A7BCB3003094D9 /* SPTAuthorizationOptions.html */,
+				096FE1DB30A7BCB3003094D9 /* SPTErrorCode.html */,
+				096FE1DC30A7BCB3003094D9 /* SPTScope.html */,
+			);
+			path = Constants;
+			sourceTree = "<group>";
+		};
+		096FE1E630A7BCB3003094D9 /* scss */ = {
+			isa = PBXGroup;
+			children = (
+				096FE1DE30A7BCB3003094D9 /* _index.scss */,
+				096FE1DF30A7BCB3003094D9 /* _layout.scss */,
+				096FE1E030A7BCB3003094D9 /* _normalize.scss */,
+				096FE1E130A7BCB3003094D9 /* _object.scss */,
+				096FE1E230A7BCB3003094D9 /* _print.scss */,
+				096FE1E330A7BCB3003094D9 /* _variables.scss */,
+				096FE1E430A7BCB3003094D9 /* _xcode.scss */,
+				096FE1E530A7BCB3003094D9 /* style.scss */,
+			);
+			path = scss;
+			sourceTree = "<group>";
+		};
+		096FE1E830A7BCB3003094D9 /* css */ = {
+			isa = PBXGroup;
+			children = (
+				096FE1E630A7BCB3003094D9 /* scss */,
+				096FE1E730A7BCB3003094D9 /* style.css */,
+			);
+			path = css;
+			sourceTree = "<group>";
+		};
+		096FE1EE30A7BCB3003094D9 /* img */ = {
+			isa = PBXGroup;
+			children = (
+				096FE1E930A7BCB3003094D9 /* button_bar_background.png */,
+				096FE1EA30A7BCB3003094D9 /* disclosure.png */,
+				096FE1EB30A7BCB3003094D9 /* disclosure_open.png */,
+				096FE1EC30A7BCB3003094D9 /* library_background.png */,
+				096FE1ED30A7BCB3003094D9 /* title_background.png */,
+			);
+			path = img;
+			sourceTree = "<group>";
+		};
+		096FE1F030A7BCB3003094D9 /* js */ = {
+			isa = PBXGroup;
+			children = (
+				096FE1EF30A7BCB3003094D9 /* script.js */,
+			);
+			path = js;
+			sourceTree = "<group>";
+		};
+		096FE20830A7BCB3003094D9 /* Protocols */ = {
+			isa = PBXGroup;
+			children = (
+				096FE1F130A7BCB3003094D9 /* SPTAppRemoteAlbum.html */,
+				096FE1F230A7BCB3003094D9 /* SPTAppRemoteArtist.html */,
+				096FE1F330A7BCB3003094D9 /* SPTAppRemoteConnectivityAPI.html */,
+				096FE1F430A7BCB3003094D9 /* SPTAppRemoteConnectivityAPIDelegate.html */,
+				096FE1F530A7BCB3003094D9 /* SPTAppRemoteConnectivityState.html */,
+				096FE1F630A7BCB3003094D9 /* SPTAppRemoteContentAPI.html */,
+				096FE1F730A7BCB3003094D9 /* SPTAppRemoteContentItem.html */,
+				096FE1F830A7BCB3003094D9 /* SPTAppRemoteCrossfadeState.html */,
+				096FE1F930A7BCB3003094D9 /* SPTAppRemoteDelegate.html */,
+				096FE1FA30A7BCB3003094D9 /* SPTAppRemoteImageAPI.html */,
+				096FE1FB30A7BCB3003094D9 /* SPTAppRemoteImageRepresentable.html */,
+				096FE1FC30A7BCB3003094D9 /* SPTAppRemoteLibraryState.html */,
+				096FE1FD30A7BCB3003094D9 /* SPTAppRemotePlaybackOptions.html */,
+				096FE1FE30A7BCB3003094D9 /* SPTAppRemotePlaybackRestrictions.html */,
+				096FE1FF30A7BCB3003094D9 /* SPTAppRemotePlayerAPI.html */,
+				096FE20030A7BCB3003094D9 /* SPTAppRemotePlayerState.html */,
+				096FE20130A7BCB3003094D9 /* SPTAppRemotePlayerStateDelegate.html */,
+				096FE20230A7BCB3003094D9 /* SPTAppRemotePodcastPlaybackSpeed.html */,
+				096FE20330A7BCB3003094D9 /* SPTAppRemoteTrack.html */,
+				096FE20430A7BCB3003094D9 /* SPTAppRemoteUserAPI.html */,
+				096FE20530A7BCB3003094D9 /* SPTAppRemoteUserAPIDelegate.html */,
+				096FE20630A7BCB3003094D9 /* SPTAppRemoteUserCapabilities.html */,
+				096FE20730A7BCB3003094D9 /* SPTSessionManagerDelegate.html */,
+			);
+			path = Protocols;
+			sourceTree = "<group>";
+		};
+		096FE20B30A7BCB3003094D9 /* html */ = {
+			isa = PBXGroup;
+			children = (
+				096FE1CE30A7BCB3003094D9 /* Blocks */,
+				096FE1D530A7BCB3003094D9 /* Classes */,
+				096FE1DD30A7BCB3003094D9 /* Constants */,
+				096FE1E830A7BCB3003094D9 /* css */,
+				096FE1EE30A7BCB3003094D9 /* img */,
+				096FE1F030A7BCB3003094D9 /* js */,
+				096FE20830A7BCB3003094D9 /* Protocols */,
+				096FE20930A7BCB3003094D9 /* hierarchy.html */,
+				096FE20A30A7BCB3003094D9 /* index.html */,
+			);
+			path = html;
+			sourceTree = "<group>";
+		};
+		096FE20D30A7BCB3003094D9 /* docs */ = {
+			isa = PBXGroup;
+			children = (
+				096FE20B30A7BCB3003094D9 /* html */,
+				096FE20C30A7BCB3003094D9 /* auth.md */,
+			);
+			path = docs;
+			sourceTree = "<group>";
+		};
+		096FE21130A7BCB3003094D9 /* img */ = {
+			isa = PBXGroup;
+			children = (
+				096FE20E30A7BCB3003094D9 /* import_sdk.png */,
+				096FE20F30A7BCB3003094D9 /* info_plist.png */,
+				096FE21030A7BCB3003094D9 /* xcframework-import.png */,
+			);
+			path = img;
+			sourceTree = "<group>";
+		};
+		096FE21330A7BCB3003094D9 /* Licenses */ = {
+			isa = PBXGroup;
+			children = (
+				096FE21230A7BCB3003094D9 /* MPMessagePack-LICENSE.md */,
+			);
+			path = Licenses;
+			sourceTree = "<group>";
+		};
+		096FE21A30A7BCB3003094D9 /* ios-sdk-5.0.1 */ = {
+			isa = PBXGroup;
+			children = (
+				096FE1CC30A7BCB3003094D9 /* DemoProjects */,
+				096FE20D30A7BCB3003094D9 /* docs */,
+				096FE21130A7BCB3003094D9 /* img */,
+				096FE21330A7BCB3003094D9 /* Licenses */,
+				096FE21430A7BCB3003094D9 /* .gitignore */,
+				096FE21530A7BCB3003094D9 /* catalog-info.yaml */,
+				096FE21630A7BCB3003094D9 /* CHANGELOG.md */,
+				096FE21730A7BCB3003094D9 /* Package.swift */,
+				096FE21830A7BCB3003094D9 /* README.md */,
+			);
+			path = "ios-sdk-5.0.1";
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -85,6 +488,7 @@
 				000000000000000120000000 /* Sources */,
 				000000000000000130000000 /* Frameworks */,
 				000000000000000140000000 /* Resources */,
+				096FE21D30A7BEEB003094D9 /* Embed Frameworks */,
 			);
 			buildRules = (
 			);
@@ -197,6 +601,41 @@
 			targetProxy = 000000000000000400000001 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
+
+/* Begin PBXVariantGroup section */
+		096FE19E30A7BCB3003094D9 /* LaunchScreen.storyboard */ = {
+			isa = PBXVariantGroup;
+			children = (
+				096FE19D30A7BCB3003094D9 /* Base */,
+			);
+			name = LaunchScreen.storyboard;
+			sourceTree = "<group>";
+		};
+		096FE1A030A7BCB3003094D9 /* Main.storyboard */ = {
+			isa = PBXVariantGroup;
+			children = (
+				096FE19F30A7BCB3003094D9 /* Base */,
+			);
+			name = Main.storyboard;
+			sourceTree = "<group>";
+		};
+		096FE1B330A7BCB3003094D9 /* LaunchScreen.storyboard */ = {
+			isa = PBXVariantGroup;
+			children = (
+				096FE1B230A7BCB3003094D9 /* Base */,
+			);
+			name = LaunchScreen.storyboard;
+			sourceTree = "<group>";
+		};
+		096FE1C230A7BCB3003094D9 /* LaunchScreen.storyboard */ = {
+			isa = PBXVariantGroup;
+			children = (
+				096FE1C130A7BCB3003094D9 /* Base */,
+			);
+			name = LaunchScreen.storyboard;
+			sourceTree = "<group>";
+		};
+/* End PBXVariantGroup section */
 
 /* Begin XCBuildConfiguration section */
 		000000000000000011000000 /* Debug configuration for PBXProject "rewind poc" */ = {
@@ -338,6 +777,7 @@
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 6X4CQCK827;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
@@ -360,6 +800,7 @@
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MARKETING_VERSION = 1.0;
+				"OTHER_LDFLAGS[arch=*]" = "-ObjC";
 				PRODUCT_BUNDLE_IDENTIFIER = com.stevenyxng.rewindpoc;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -369,6 +810,7 @@
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				"SWIFT_OBJC_BRIDGING_HEADER[arch=*]" = "rewind-Bridging-Header.h";
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2,7";
@@ -380,6 +822,7 @@
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 6X4CQCK827;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
@@ -402,6 +845,7 @@
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MARKETING_VERSION = 1.0;
+				"OTHER_LDFLAGS[arch=*]" = "-ObjC";
 				PRODUCT_BUNDLE_IDENTIFIER = com.stevenyxng.rewindpoc;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -411,6 +855,7 @@
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				"SWIFT_OBJC_BRIDGING_HEADER[arch=*]" = "rewind-Bridging-Header.h";
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2,7";

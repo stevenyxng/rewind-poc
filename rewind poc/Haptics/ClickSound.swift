@@ -1,8 +1,11 @@
 import AVFoundation
+import OSLog
 
 /// A tiny synthesized "tick" (no audio asset), played on wheel detents when
 /// Settings > Click Sound is on. Uses the app's shared `.playback` audio session.
 final class ClickSound {
+    nonisolated private static let logger = Logger(subsystem: "com.stevenyxng.rewindpoc", category: "AudioDiagnostics")
+
     var isEnabled = false {
         didSet { if !isEnabled { stop() } }
     }
@@ -33,13 +36,22 @@ final class ClickSound {
             buffer = b
         }
         if !engine.isRunning {
-            do { try engine.start() } catch { return false }
+            let session = AVAudioSession.sharedInstance()
+            Self.logger.notice("Starting click engine: category=\(session.category.rawValue, privacy: .public), options=\(session.categoryOptions.rawValue), otherAudio=\(session.isOtherAudioPlaying)")
+            do {
+                try engine.start()
+                Self.logger.notice("Click engine started")
+            } catch {
+                Self.logger.error("Click engine start failed: code=\((error as NSError).code)")
+                return false
+            }
         }
         if !node.isPlaying { node.play() }
         return true
     }
 
     private func stop() {
+        Self.logger.notice("Stopping click engine")
         node.stop()
         engine.stop()
     }

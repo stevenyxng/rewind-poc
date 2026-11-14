@@ -1,4 +1,5 @@
 import AVFoundation
+import OSLog
 import MediaPlayer
 import UIKit
 
@@ -6,6 +7,8 @@ import UIKit
 /// interruptions, lock screen / Control Center.
 @Observable
 final class PlaybackEngine {
+    nonisolated private static let logger = Logger(subsystem: "com.stevenyxng.rewindpoc", category: "AudioDiagnostics")
+
     private(set) var queue = PlaybackQueue()
     /// Play intent (what the user asked for), which is what the UI shows.
     private(set) var isPlaying = false
@@ -54,12 +57,20 @@ final class PlaybackEngine {
     }
 
     func play() {
+        Self.logger.notice("Local play requested: hasTrack=\(self.hasTrack), playing=\(self.isPlaying)")
         guard hasTrack else { return }
         if player.currentItem == nil, let track = queue.current {
             load(track, autoplay: true)
             return
         }
-        try? AVAudioSession.sharedInstance().setActive(true)
+        configureSession(exclusive: true)
+        Self.logger.notice("Local player activating audio session")
+        do {
+            try AVAudioSession.sharedInstance().setActive(true)
+            Self.logger.notice("Local audio session activated")
+        } catch {
+            Self.logger.error("Local audio activation failed: code=\((error as NSError).code)")
+        }
         player.play()
         isPlaying = true
         errorMessage = nil
@@ -69,6 +80,7 @@ final class PlaybackEngine {
     func pause() {
         player.pause()
         isPlaying = false
+        configureSession()
         updateNowPlayingInfo()
     }
 
@@ -143,6 +155,7 @@ final class PlaybackEngine {
         player.replaceCurrentItem(with: nil)
         queue = PlaybackQueue()
         isPlaying = false
+        configureSession()
         currentTime = 0
         duration = 0
         artwork = nil
@@ -184,6 +197,7 @@ final class PlaybackEngine {
             } catch {
                 guard token == self.loadToken else { return }
                 self.isPlaying = false
+                self.configureSession()
                 self.errorMessage = "Can't play “\(track.title)”"
                 self.updateNowPlayingInfo()
             }
@@ -242,8 +256,15 @@ final class PlaybackEngine {
         })
     }
 
-    private func configureSession() {
-        try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)
+    // Wheel sounds mix with other apps unless Rewind is playing its own music.
+    private func configureSession(exclusive: Bool = false) {
+        do {
+            let options: AVAudioSession.CategoryOptions = exclusive ? [] : [.mixWithOthers]
+            try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default, options: options)
+            Self.logger.notice("Configured playback audio session: exclusive=\(exclusive)")
+        } catch {
+            Self.logger.error("Audio category configuration failed: code=\((error as NSError).code)")
+        }
     }
 
     private func observeSession() {
@@ -257,10 +278,12 @@ final class PlaybackEngine {
                 rawValue: note.userInfo?[AVAudioSessionInterruptionOptionKey] as? UInt ?? 0)
             MainActor.assumeIsolated {
                 guard let self, let type else { return }
+                Self.logger.notice("Audio interruption: type=\(type.rawValue), options=\(options.rawValue), localPlaying=\(self.isPlaying), hasTrack=\(self.hasTrack)")
                 switch type {
                 case .began:
                     // The system already paused the player; reflect it.
                     self.isPlaying = false
+                    self.configureSession()
                     self.updateNowPlayingInfo()
                 case .ended:
                     if options.contains(.shouldResume) { self.play() }
@@ -274,6 +297,7 @@ final class PlaybackEngine {
             let reason = (note.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt)
                 .flatMap(AVAudioSession.RouteChangeReason.init(rawValue:))
             MainActor.assumeIsolated {
+                Self.logger.notice("Audio route changed: reason=\(reason?.rawValue ?? 0)")
                 // Headphones unplugged: pause, like every music player.
                 if reason == .oldDeviceUnavailable { self?.pause() }
             }
@@ -281,8 +305,9 @@ final class PlaybackEngine {
         observers.append(center.addObserver(forName: AVAudioSession.mediaServicesWereResetNotification,
                                             object: session, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated {
-                self?.configureSession()
-                self?.updateNowPlayingInfo()
+                guard let self else { return }
+                self.configureSession(exclusive: self.isPlaying)
+                self.updateNowPlayingInfo()
             }
         })
     }

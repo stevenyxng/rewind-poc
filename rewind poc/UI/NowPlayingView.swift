@@ -6,30 +6,48 @@ struct NowPlayingView: View {
     let model: AppModel
 
     private var player: PlaybackEngine { model.player }
+    private var spotify: SpotifyManager { model.spotifyManager }
+    private var usesSpotify: Bool { spotify.isConnected }
+    private var title: String {
+        usesSpotify ? (spotify.title.isEmpty ? "Waiting for Spotify…" : spotify.title)
+            : (player.currentTrack?.title ?? "Not Playing")
+    }
+    private var artist: String {
+        usesSpotify ? spotify.artist : (player.currentTrack?.artist ?? "")
+    }
+    private var playbackError: String? {
+        usesSpotify || !player.hasTrack ? spotify.errorMessage : player.errorMessage
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             // Takes whatever height is left over, so the artwork is as large as fits.
-            Artwork(image: player.artwork)
+            Artwork(image: usesSpotify ? spotify.artwork : player.artwork)
+                .accessibilityLabel("Cover art")
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             HStack(alignment: .center, spacing: 10) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(player.currentTrack?.title ?? "Not Playing")
+                    Text(verbatim: title)
                         .font(.system(size: 20, weight: .bold))
                         .foregroundStyle(Theme.primary)
-                    Text(player.currentTrack?.artist ?? "")
+                    Text(verbatim: artist)
                         .font(.system(size: 15))
                         .foregroundStyle(Theme.secondary)
                 }
                 .lineLimit(1)
                 Spacer(minLength: 0)
                 HStack(spacing: 8) {
+                    if usesSpotify {
+                        Image(systemName: spotify.isPaused ? "pause.fill" : "play.fill")
+                            .accessibilityLabel(spotify.isPaused ? "Paused" : "Playing")
+                    } else {
                     if player.queue.isShuffled { Image(systemName: "shuffle") }
                     switch player.queue.repeatMode {
                     case .off: EmptyView()
                     case .all: Image(systemName: "repeat")
                     case .one: Image(systemName: "repeat.1")
+                    }
                     }
                 }
                 .font(.system(size: 13, weight: .semibold))
@@ -37,9 +55,18 @@ struct NowPlayingView: View {
             }
 
             VStack(alignment: .leading, spacing: 6) {
-                if let error = player.errorMessage {
+                if let error = playbackError {
                     Text(error)
                         .font(.system(size: 13))
+                        .foregroundStyle(Theme.secondary)
+                }
+                if usesSpotify {
+                    Text("Spotify")
+                        .font(.caption)
+                        .foregroundStyle(Theme.secondary)
+                } else if !player.hasTrack {
+                    Text("Connect to Spotify in Settings or choose a song from Music.")
+                        .font(.caption)
                         .foregroundStyle(Theme.secondary)
                 }
                 bottomBar
@@ -50,11 +77,22 @@ struct NowPlayingView: View {
     }
 
     @ViewBuilder private var bottomBar: some View {
-        if let scrub = model.scrubPosition {
+        if usesSpotify {
+            SpotifyTimeBar(spotify: spotify)
+        } else if let scrub = model.scrubPosition {
             TimeBar(position: scrub, duration: player.duration, scrubbing: true)
         } else {
             TimeBar(position: player.currentTime, duration: player.duration, scrubbing: false)
         }
+    }
+}
+
+// Keep frequent progress updates separate from the artwork and metadata.
+private struct SpotifyTimeBar: View {
+    let spotify: SpotifyManager
+
+    var body: some View {
+        TimeBar(position: spotify.currentTime, duration: spotify.duration, scrubbing: false)
     }
 }
 
