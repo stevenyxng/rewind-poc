@@ -39,7 +39,7 @@ struct NowPlayingView: View {
                 Spacer(minLength: 0)
                 HStack(spacing: 8) {
                     if usesSpotify {
-                        Image(systemName: spotify.isPaused ? "pause.fill" : "play.fill")
+                        Image(systemName: spotify.isPaused ? "play.fill" : "pause.fill")
                             .accessibilityLabel(spotify.isPaused ? "Paused" : "Playing")
                     } else {
                     if player.queue.isShuffled { Image(systemName: "shuffle") }
