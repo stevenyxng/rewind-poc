@@ -16,6 +16,7 @@ struct RewindApp: App {
         }
         .onChange(of: scenePhase, initial: true) { _, phase in
             model.spotifyManager.setAppActive(phase == .active)
+            if phase == .active { model.becameActive() }
         }
     }
 }

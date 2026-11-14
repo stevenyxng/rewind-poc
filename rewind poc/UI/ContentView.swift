@@ -42,6 +42,9 @@ struct ContentView: View {
             }
         }
         .background(Theme.background.ignoresSafeArea())
+        .onChange(of: model.hasNowPlaying, initial: true) { _, _ in
+            model.presentDefaultPlayback()
+        }
         .fileImporter(isPresented: $model.showingImporter, allowedContentTypes: Self.importTypes,
                       allowsMultipleSelection: true) { model.handleImport($0) }
     }

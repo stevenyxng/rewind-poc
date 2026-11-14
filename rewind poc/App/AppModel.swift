@@ -45,7 +45,10 @@ final class AppModel {
         player.urlResolver = { [unowned self] track in try await playableURL(for: track) }
         spotifyManager.onError = { [weak self] message in self?.show(message) }
         spotifyManager.library.onChange = { [weak self] in self?.navigator.clampCurrent() }
-        tutorial.onFinish = { [unowned self] in settings.tutorialSeen = true }
+        tutorial.onFinish = { [unowned self] in
+            settings.tutorialSeen = true
+            presentDefaultPlayback()
+        }
     }
 
     /// Production wiring. Firebase is only touched if GoogleService-Info.plist is bundled.
@@ -78,6 +81,20 @@ final class AppModel {
         await spotifyRefresh
     }
 
+    var hasNowPlaying: Bool {
+        player.hasTrack || (spotifyManager.isConnected && spotifyManager.trackURI != nil)
+    }
+
+    func presentDefaultPlayback() {
+        guard !tutorial.isActive, !showingImporter else { return }
+        navigator.presentPlaybackIfPreferred(hasTrack: hasNowPlaying)
+    }
+
+    func becameActive() {
+        guard !tutorial.isActive, !showingImporter else { return }
+        navigator.preferPlayback(hasTrack: hasNowPlaying)
+    }
+
     var menuContext: MenuContext {
         MenuContext(localTracks: library.tracks,
                     cloudTracks: cloud.tracks,
@@ -85,7 +102,7 @@ final class AppModel {
                     spotify: spotifyManager.library.snapshot,
                     spotifyState: spotifyManager.library.state,
                     spotifyPlaylistContents: spotifyManager.library.playlistContents,
-                    hasNowPlaying: player.hasTrack,
+                    hasNowPlaying: hasNowPlaying,
                     clickSound: settings.clickSound,
                     haptics: settings.haptics,
                     shuffle: settings.shuffle,
@@ -124,7 +141,10 @@ final class AppModel {
     private func tick(_ direction: TickDirection, rate: Double) {
         switch navigator.screen {
         case .nowPlaying:
-            scrubTick(direction, rate: rate)
+            endScrub()
+            navigator.revealMainMenu()
+            haptics.detent()
+            clickSound.play()
         case .hapticsLab:
             let target = labDetent + direction.sign
             if (0..<Self.labDetentCount).contains(target) {
@@ -169,8 +189,14 @@ final class AppModel {
         if button != .center { buttonClick(button) }
         switch button {
         case .menu:
-            if navigator.screen == .nowPlaying { endScrub() }
-            navigator.back()
+            if navigator.screen == .nowPlaying {
+                endScrub()
+                navigator.revealMainMenu()
+            } else if navigator.screen == .main, hasNowPlaying {
+                openNowPlaying()
+            } else {
+                navigator.back()
+            }
         case .center:
             centerPressed()
         case .playPause:
@@ -318,8 +344,7 @@ final class AppModel {
 
     private func openNowPlaying() {
         endScrub()
-        navigator.removeScreens { $0 == .nowPlaying }
-        navigator.push(.nowPlaying)
+        navigator.showNowPlaying()
     }
 
     private func endScrub() {

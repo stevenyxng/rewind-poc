@@ -14,6 +14,30 @@ final class MenuNavigator {
     enum MoveResult: Equatable { case moved, wall }
 
     private(set) var stack: [Frame] = [Frame(screen: .main)]
+    private var prefersNowPlaying = true
+
+    func presentPlaybackIfPreferred(hasTrack: Bool) {
+        guard hasTrack, prefersNowPlaying, screen != .nowPlaying else { return }
+        showNowPlaying()
+    }
+
+    func preferPlayback(hasTrack: Bool) {
+        prefersNowPlaying = true
+        presentPlaybackIfPreferred(hasTrack: hasTrack)
+    }
+
+    func showNowPlaying() {
+        prefersNowPlaying = true
+        guard screen != .nowPlaying else { return }
+        removeScreens { $0 == .nowPlaying }
+        push(.nowPlaying)
+    }
+
+    /// The first wheel tick reveals the menu without skipping its highlighted row.
+    func revealMainMenu() {
+        prefersNowPlaying = false
+        pop(to: .main)
+    }
 
     /// Rows that fit on the display; set by the view from its height.
     var visibleRows = 6 {
