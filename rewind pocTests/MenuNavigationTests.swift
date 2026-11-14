@@ -31,7 +31,7 @@ struct MenuNavigationTests {
 
     @Test func musicAndSettingsMenus() {
         #expect(MenuBuilder.items(for: .music, context: context).map(\.title)
-                == ["Songs", "Artists", "Albums", "Local Files", "Cloud"])
+                == ["Songs", "Artists", "Albums", "Playlists", "Local Files", "Cloud"])
         let settings = MenuBuilder.items(for: .settings, context: context).map(\.title)
         for required in ["Appearance", "Click Sound", "Haptics", "Haptics Lab", "Import Files", "About"] {
             #expect(settings.contains(required))

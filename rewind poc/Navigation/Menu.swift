@@ -3,7 +3,8 @@ import Foundation
 /// Every screen the display can show.
 nonisolated enum Screen: Hashable, Sendable {
     case main
-    case music, songs, artists, albums
+    case music, songs, artists, albums, playlists
+    case spotifyArtist(String)
     case artist(String)
     case artistSongs(String)
     case album(String)
@@ -31,6 +32,8 @@ nonisolated enum MenuAction: Equatable, Sendable {
     case refreshCloud
     case startTutorial
     case connectSpotify
+    case refreshSpotify
+    case playSpotify(String)
     case none
 }
 
@@ -50,6 +53,8 @@ nonisolated struct MenuContext: Sendable {
     var localTracks: [Track] = []
     var cloudTracks: [Track] = []
     var cloudState: CloudState = .notConfigured
+    var spotify = SpotifyLibrarySnapshot()
+    var spotifyState = SpotifyLibraryState.disconnected
     var hasNowPlaying = false
     var clickSound = true
     var haptics = true
@@ -79,19 +84,39 @@ nonisolated enum MenuBuilder {
                 MenuItem(id: "songs", title: "Songs", action: .push(.songs)),
                 MenuItem(id: "artists", title: "Artists", action: .push(.artists)),
                 MenuItem(id: "albums", title: "Albums", action: .push(.albums)),
+                MenuItem(id: "playlists", title: "Playlists", action: .push(.playlists)),
                 MenuItem(id: "local", title: "Local Files", action: .push(.localFiles)),
                 MenuItem(id: "cloud", title: "Cloud", action: .push(.cloud)),
             ]
 
         case .songs:
-            let tracks = c.allTracks
-            guard !tracks.isEmpty else { return [placeholder("No songs yet")] }
-            return songRows(tracks)
+            let rows = (songRows(c.allTracks) + spotifySongRows(c.spotify.songs))
+                .sorted { Track.sortKey($0.title) < Track.sortKey($1.title) }
+            return rows + spotifyFooter(c.spotifyState, hasRows: !rows.isEmpty, empty: "No songs yet")
 
         case .artists:
             let artists = Set(c.allTracks.map(\.artist)).sorted { Track.sortKey($0) < Track.sortKey($1) }
-            guard !artists.isEmpty else { return [placeholder("No artists")] }
-            return artists.map { MenuItem(id: "artist:" + $0, title: $0, action: .push(.artist($0))) }
+            let local = artists.map { MenuItem(id: "artist:" + $0, title: $0, action: .push(.artist($0))) }
+            let spotify = c.spotify.artists.map {
+                MenuItem(id: $0.uri, title: $0.name, detail: "Spotify", action: .push(.spotifyArtist($0.id)))
+            }
+            let rows = (local + spotify).sorted { Track.sortKey($0.title) < Track.sortKey($1.title) }
+            return rows + spotifyFooter(c.spotifyState, hasRows: !rows.isEmpty, empty: "No artists")
+
+        case .playlists:
+            let rows = c.spotify.playlists.map {
+                MenuItem(id: $0.uri, title: $0.name, detail: "Spotify", action: .playSpotify($0.uri))
+            }
+            return rows + spotifyFooter(c.spotifyState, hasRows: !rows.isEmpty, empty: "No Spotify playlists")
+
+        case .spotifyArtist(let id):
+            guard let artist = c.spotify.artists.first(where: { $0.id == id }) else {
+                return [placeholder("Artist no longer in library")]
+            }
+            let songs = c.spotify.songs.filter { $0.artists.contains(where: { $0.id == id }) }
+            return [MenuItem(id: "play:" + artist.id, title: "Play " + artist.name,
+                             detail: "Spotify", action: .playSpotify(artist.uri))]
+                + (songs.isEmpty ? [placeholder("No liked songs by this artist")] : spotifySongRows(songs))
 
         case .artist(let artist):
             let tracks = c.allTracks.filter { $0.artist == artist }
@@ -161,6 +186,7 @@ nonisolated enum MenuBuilder {
                 MenuItem(id: "repeat", title: "Repeat", detail: c.repeatMode.label, action: .toggle(.repeatMode)),
                 MenuItem(id: "import", title: "Import Files", action: .importFiles),
                 MenuItem(id: "spotify", title: "Connect to Spotify", action: .connectSpotify),
+                MenuItem(id: "spotifyRefresh", title: "Refresh Spotify Library", action: .refreshSpotify),
                 MenuItem(id: "tutorial", title: "Tutorial", action: .startTutorial),
                 MenuItem(id: "about", title: "About", action: .push(.about)),
             ]
@@ -180,6 +206,32 @@ nonisolated enum MenuBuilder {
 
         case .hapticsLab, .nowPlaying:
             return []        // custom screens
+        }
+    }
+
+    private static func spotifySongRows(_ songs: [SpotifyLibrarySong]) -> [MenuItem] {
+        songs.map {
+            MenuItem(id: $0.uri, title: $0.name, detail: $0.canPlay ? "Spotify" : "Unavailable",
+                     action: $0.canPlay ? .playSpotify($0.uri) : .none)
+        }
+    }
+
+    private static func spotifyFooter(_ state: SpotifyLibraryState, hasRows: Bool, empty: String) -> [MenuItem] {
+        switch state {
+        case .disconnected:
+            return hasRows ? [] : [
+                placeholder(empty),
+                MenuItem(id: "spotifyConnect", title: "Connect to Spotify", action: .connectSpotify)
+            ]
+        case .loading:
+            return [placeholder("Loading Spotify…")]
+        case .failed(let message):
+            return [placeholder(message),
+                    MenuItem(id: "spotifyRetry", title: "Retry Spotify Library", action: .refreshSpotify),
+                    MenuItem(id: "spotifyConnect", title: "Connect to Spotify", action: .connectSpotify)]
+        case .ready:
+            return (hasRows ? [] : [placeholder(empty)])
+                + [MenuItem(id: "spotifyRefresh", title: "Refresh Spotify Library", action: .refreshSpotify)]
         }
     }
 

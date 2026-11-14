@@ -42,6 +42,7 @@ final class AppModel {
         }
         player.urlResolver = { [unowned self] track in try await playableURL(for: track) }
         spotifyManager.onError = { [weak self] message in self?.show(message) }
+        spotifyManager.library.onChange = { [weak self] in self?.navigator.clampCurrent() }
         tutorial.onFinish = { [unowned self] in settings.tutorialSeen = true }
     }
 
@@ -70,13 +71,17 @@ final class AppModel {
             navigator.push(.hapticsLab)
         }
         #endif
+        async let spotifyRefresh: Void = spotifyManager.library.refresh()
         await cloud.refresh()
+        await spotifyRefresh
     }
 
     var menuContext: MenuContext {
         MenuContext(localTracks: library.tracks,
                     cloudTracks: cloud.tracks,
                     cloudState: cloud.state,
+                    spotify: spotifyManager.library.snapshot,
+                    spotifyState: spotifyManager.library.state,
                     hasNowPlaying: player.hasTrack,
                     clickSound: settings.clickSound,
                     haptics: settings.haptics,
@@ -217,11 +222,16 @@ final class AppModel {
             navigator.back()
         case .refreshCloud:
             Task { await cloud.refresh() }
+        case .playSpotify(let uri):
+            Task {
+                player.pause()
+                if await spotifyManager.play(uri: uri) { openNowPlaying() }
+            }
+        case .refreshSpotify:
+            Task { await spotifyManager.library.refresh() }
         case .connectSpotify:
             Task {
-                if !(await spotifyManager.connect()) {
-                    show("Install Spotify on this device to connect.")
-                }
+                await spotifyManager.connectLibraryAndPlayback()
             }
         case .startTutorial:
             startTutorial()

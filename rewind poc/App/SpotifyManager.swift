@@ -26,6 +26,32 @@ final class SpotifyManager: NSObject, @preconcurrency SPTAppRemoteDelegate, @pre
         redirectURL: redirectURL
     )
 
+    @ObservationIgnored private(set) lazy var webAuth = SpotifyWebAuth(clientID: clientID, redirectURL: redirectURL)
+    @ObservationIgnored private(set) lazy var library = SpotifyLibrary(api: SpotifyLibraryAPI(
+        token: { [webAuth] force in try await webAuth.validAccessToken(forceRefresh: force) }
+    ))
+    private(set) var isAuthorizingLibrary = false
+
+    func connectLibraryAndPlayback() async {
+        guard !isAuthorizingLibrary else { return }
+        isAuthorizingLibrary = true
+        defer { isAuthorizingLibrary = false }
+        errorMessage = nil
+        do {
+            try await webAuth.authorizeIfNeeded()
+            Task { await library.refresh() }
+            if !(await connect()) {
+                report("Library access authorized. Install Spotify on this device to connect playback.")
+            }
+        } catch SpotifyAuthError.cancelled {
+            // Dismissing the system sheet is a normal user action.
+        } catch let error as SpotifyAuthError {
+            report(error.localizedDescription)
+        } catch {
+            report("Couldn't connect to Spotify. Check your connection and try again.")
+        }
+    }
+
     // Kept in memory for the current app session.
     @ObservationIgnored private var accessToken: String?
     private(set) var isConnected = false
@@ -64,6 +90,41 @@ final class SpotifyManager: NSObject, @preconcurrency SPTAppRemoteDelegate, @pre
 
     enum Command {
         case togglePlayPause, next, previous
+    }
+
+    /// Spotify owns audio playback; library metadata never becomes a local audio URL.
+    func play(uri: String) async -> Bool {
+        guard ["spotify:track:", "spotify:artist:", "spotify:playlist:"].contains(where: uri.hasPrefix) else {
+            report("This Spotify item can't be played.")
+            return false
+        }
+        guard !commandPending, !isAuthorizingLibrary else { return false }
+        commandPending = true
+        defer { commandPending = false }
+        errorMessage = nil
+        if !isConnected || !appRemote.isConnected {
+            let opened: Bool = await withCheckedContinuation { continuation in
+                appRemote.authorizeAndPlayURI(uri) { opened in
+                    continuation.resume(returning: opened)
+                }
+            }
+            if !opened { report("Install Spotify on this device to play this item.") }
+            return opened
+        }
+        guard let api = appRemote.playerAPI else { return false }
+        return await withCheckedContinuation { continuation in
+            api.play(uri) { [weak self] _, error in
+                MainActor.assumeIsolated {
+                    if let error {
+                        self?.report("Spotify couldn't play this item (code \((error as NSError).code)).")
+                        continuation.resume(returning: false)
+                    } else {
+                        self?.refreshPlayerState()
+                        continuation.resume(returning: true)
+                    }
+                }
+            }
+        }
     }
 
     func perform(_ command: Command) {
@@ -171,6 +232,10 @@ final class SpotifyManager: NSObject, @preconcurrency SPTAppRemoteDelegate, @pre
     }
 
     func handleCallback(_ url: URL) {
+        // Web authorization callbacks belong exclusively to ASWebAuthenticationSession.
+        // Never interpret a code/state callback as an App Remote access-token response.
+        let queryNames = Set(URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.map(\.name) ?? [])
+        guard queryNames.isDisjoint(with: ["code", "state"]) else { return }
         // Log only routing components. Never log the full URL, query, fragment, or credentials.
         let scheme = url.scheme ?? "<nil>"
         let host = url.host ?? "<nil>"
