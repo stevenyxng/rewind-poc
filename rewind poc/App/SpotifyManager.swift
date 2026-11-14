@@ -179,7 +179,21 @@ final class SpotifyManager: NSObject, @preconcurrency SPTAppRemoteDelegate, @pre
     /// A command error alone does not establish that the user has a Free account.
     private func reportControlFailure(_ error: Error, command: Command) {
         let fallback = "Spotify couldn't complete that control (code \((error as NSError).code))."
-        guard case .previous = command, let userAPI = appRemote.userAPI else {
+        switch command {
+        case .togglePlayPause:
+            report(fallback)
+            return
+        case .next:
+            // -2001 means a rejected request, not necessarily an exhausted skip allowance.
+            let failure = error as NSError
+            guard failure.domain == SPTAppRemoteErrorDomain, failure.code == -2001 else {
+                report(fallback)
+                return
+            }
+        case .previous:
+            break
+        }
+        guard let userAPI = appRemote.userAPI else {
             report(fallback)
             return
         }
@@ -193,13 +207,40 @@ final class SpotifyManager: NSObject, @preconcurrency SPTAppRemoteDelegate, @pre
                 if capabilityError == nil,
                    let capabilities = result as? SPTAppRemoteUserCapabilities,
                    !capabilities.canPlayOnDemand {
-                    self.report("This action requires a Spotify Premium account")
+                    if case .next = command {
+                        self.reportSkipRestriction(fallback: fallback, connection: connection)
+                    } else {
+                        self.report("This action requires a Spotify Premium account")
+                    }
                 } else {
                     // Unknown account status and unrelated Premium errors retain the original message.
                     self.report(fallback)
                 }
             }
         })
+    }
+
+    private func reportSkipRestriction(fallback: String, connection: UUID) {
+        guard let api = appRemote.playerAPI else {
+            report(fallback)
+            return
+        }
+        commandPending = true
+        // Read fresh restrictions after the rejection: the last allowed skip may have just been used.
+        api.getPlayerState { [weak self] result, error in
+            MainActor.assumeIsolated {
+                guard let self, self.isConnected,
+                      self.connectionGeneration == connection else { return }
+                self.commandPending = false
+                if error == nil, let state = result as? SPTAppRemotePlayerState,
+                   !state.track.isAdvertisement, !state.track.isEpisode,
+                   !state.playbackRestrictions.canSkipNext {
+                    self.report("You have run out of Spotify skips")
+                } else {
+                    self.report(fallback)
+                }
+            }
+        }
     }
 
     @ObservationIgnored private var connectionGeneration = UUID()
