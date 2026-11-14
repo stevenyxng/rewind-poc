@@ -105,8 +105,8 @@ final class AppModel {
                     hasNowPlaying: hasNowPlaying,
                     clickSound: settings.clickSound,
                     haptics: settings.haptics,
-                    shuffle: settings.shuffle,
-                    repeatMode: settings.repeatMode,
+                    shuffle: spotifyManager.isConnected ? spotifyManager.isShuffling : settings.shuffle,
+                    repeatMode: spotifyManager.isConnected ? spotifyManager.repeatMode : settings.repeatMode,
                     appearance: settings.appearance,
                     version: Self.version)
     }
@@ -130,10 +130,13 @@ final class AppModel {
             press(button)
         case .holdBegan(let button):
             buttonClick(button)
-            if !spotifyManager.isConnected {
+            if spotifyManager.isConnected {
+                spotifyManager.beginFastSeek(forward: button == .next)
+            } else {
                 player.beginFastSeek(forward: button == .next)
             }
         case .holdEnded:
+            spotifyManager.endFastSeek()
             player.endFastSeek()
         }
     }
@@ -296,8 +299,31 @@ final class AppModel {
                 openNowPlaying()
             case .spotify(let song):
                 player.stop()
-                guard await spotifyManager.play(uri: song.uri), !Task.isCancelled else { return }
-                openNowPlaying()
+                let result = await spotifyManager.playShuffleSelection(uri: song.uri)
+                guard !Task.isCancelled else { return }
+                switch result {
+                case .playing:
+                    openNowPlaying()
+                case .onDemandRestricted:
+                    let restriction = "You have run out of on-demand track selection as a Spotify Free member"
+                    // Fallback uses imported local files, not another Spotify request or cloud stream.
+                    let fallback = library.tracks.filter {
+                        if case .local = $0.source { return true }
+                        return false
+                    }
+                    guard let track = fallback.randomElement(),
+                          let index = fallback.firstIndex(where: { $0.id == track.id }) else {
+                        show(restriction + "\nNo local songs are available. Add local music to continue.", duration: 8)
+                        return
+                    }
+                    guard await spotifyManager.yieldToLocalPlayback(), !Task.isCancelled else { return }
+                    player.play(fallback, startAt: index, shuffled: true, repeatMode: settings.repeatMode)
+                    openNowPlaying()
+                    show(restriction, duration: 6)
+                    return // Keep the explanation visible after starting local playback.
+                case .failed:
+                    return
+                }
             }
             if spotify.skippedPlaylists > 0 {
                 show("Shuffled available songs; Spotify denied access to \(spotify.skippedPlaylists) playlists.")
@@ -328,11 +354,19 @@ final class AppModel {
             settings.haptics.toggle()
             haptics.isEnabled = settings.haptics
         case .shuffle:
-            settings.shuffle.toggle()
-            player.setShuffle(settings.shuffle)
+            if spotifyManager.isConnected {
+                spotifyManager.perform(.shuffle)
+            } else {
+                settings.shuffle.toggle()
+                player.setShuffle(settings.shuffle)
+            }
         case .repeatMode:
-            settings.repeatMode = settings.repeatMode.next
-            player.setRepeat(settings.repeatMode)
+            if spotifyManager.isConnected {
+                spotifyManager.perform(.repeatMode)
+            } else {
+                settings.repeatMode = settings.repeatMode.next
+                player.setRepeat(settings.repeatMode)
+            }
         }
     }
 
@@ -404,11 +438,11 @@ final class AppModel {
         }
     }
 
-    func show(_ text: String) {
+    func show(_ text: String, duration: Double = 2.5) {
         message = text
         messageTask?.cancel()
         messageTask = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(2.5))
+            try? await Task.sleep(for: .seconds(duration))
             guard !Task.isCancelled else { return }
             self?.message = nil
         }

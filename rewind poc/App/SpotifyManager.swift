@@ -89,7 +89,7 @@ final class SpotifyManager: NSObject, @preconcurrency SPTAppRemoteDelegate, @pre
     }
 
     enum Command {
-        case togglePlayPause, next, previous
+        case togglePlayPause, next, previous, seek(Double), shuffle, repeatMode
     }
 
     /// Spotify owns audio playback; library metadata never becomes a local audio URL.
@@ -128,6 +128,54 @@ final class SpotifyManager: NSObject, @preconcurrency SPTAppRemoteDelegate, @pre
         }
     }
 
+    enum ShufflePlaybackResult {
+        case playing, onDemandRestricted, failed
+    }
+
+    /// Connect first so opening Spotify is not mistaken for successful on-demand playback.
+    func playShuffleSelection(uri: String) async -> ShufflePlaybackResult {
+        endFastSeek()
+        if !isConnected || !appRemote.isConnected {
+            guard await connect() else {
+                report("Install Spotify on this device to play this item.")
+                return .failed
+            }
+            let deadline = ProcessInfo.processInfo.systemUptime + 30
+            while !isConnected && ProcessInfo.processInfo.systemUptime < deadline {
+                do { try await Task.sleep(for: .milliseconds(100)) } catch { return .failed }
+            }
+        }
+        guard !Task.isCancelled, isConnected, appRemote.isConnected,
+              let api = appRemote.playerAPI, !commandPending else {
+            if !Task.isCancelled { report("Couldn't connect Spotify playback. Please try again.") }
+            return .failed
+        }
+        commandPending = true
+        let connection = connectionGeneration
+        defer { if connection == connectionGeneration { commandPending = false } }
+        let onDemand = await canPlayOnDemand()
+        guard !Task.isCancelled, connection == connectionGeneration else { return .failed }
+        // Spotify exposes availability, not a numeric allowance or reset time.
+        if onDemand == false { return .onDemandRestricted }
+        let error: Error? = await withCheckedContinuation { continuation in
+            api.play(uri) { _, error in continuation.resume(returning: error) }
+        }
+        guard !Task.isCancelled, connection == connectionGeneration else { return .failed }
+        if let error {
+            let failure = error as NSError
+            if failure.domain == SPTAppRemoteErrorDomain, failure.code == -2001 {
+                let available = await canPlayOnDemand()
+                guard !Task.isCancelled, connection == connectionGeneration else { return .failed }
+                if available == false { return .onDemandRestricted }
+            }
+            report("Spotify couldn't play this item (code \(failure.code)).")
+            return .failed
+        }
+        errorMessage = nil
+        refreshPlayerState()
+        return .playing
+    }
+
     /// Release Spotify before local audio takes over, keeping controls and artwork on the same source.
     func yieldToLocalPlayback() async -> Bool {
         guard !commandPending, !isAuthorizingLibrary else { return false }
@@ -148,104 +196,168 @@ final class SpotifyManager: NSObject, @preconcurrency SPTAppRemoteDelegate, @pre
         return true
     }
 
+    private(set) var isShuffling = false
+    private(set) var repeatMode: RepeatMode = .off
+    @ObservationIgnored private var fastSeekTask: Task<Void, Never>?
+
     func perform(_ command: Command) {
+        endFastSeek()
+        Task { await execute(command) }
+    }
+
+    func beginFastSeek(forward: Bool) {
+        endFastSeek()
+        let uri = trackURI
+        let started = ProcessInfo.processInfo.systemUptime
+        fastSeekTask = Task { [weak self] in
+            while !Task.isCancelled {
+                guard let self, self.isConnected, self.trackURI == uri else { return }
+                let step = ProcessInfo.processInfo.systemUptime - started < 2 ? 2.0 : 5.0
+                guard await self.execute(.seek(forward ? step : -step)), !Task.isCancelled else { return }
+                do { try await Task.sleep(for: .milliseconds(200)) } catch { return }
+            }
+        }
+    }
+
+    func endFastSeek() {
+        fastSeekTask?.cancel()
+        fastSeekTask = nil
+    }
+
+    private func fetchState() async -> (any SPTAppRemotePlayerState)? {
+        guard let api = appRemote.playerAPI else { return nil }
+        return await withCheckedContinuation { continuation in
+            api.getPlayerState { result, error in
+                continuation.resume(returning: error == nil ? result as? SPTAppRemotePlayerState : nil)
+            }
+        }
+    }
+
+    private func canPlayOnDemand() async -> Bool? {
+        guard let api = appRemote.userAPI else { return nil }
+        return await withCheckedContinuation { continuation in
+            api.fetchCapabilities(callback: { result, error in
+                continuation.resume(returning: error == nil
+                    ? (result as? SPTAppRemoteUserCapabilities)?.canPlayOnDemand : nil)
+            })
+        }
+    }
+
+    private func isAllowed(_ command: Command, state: any SPTAppRemotePlayerState) -> Bool {
+        let restrictions = state.playbackRestrictions
+        switch command {
+        case .togglePlayPause: return true
+        case .next: return restrictions.canSkipNext
+        case .previous: return restrictions.canSkipPrevious
+        case .seek: return restrictions.canSeek
+        case .shuffle: return restrictions.canToggleShuffle
+        case .repeatMode:
+            switch state.playbackOptions.repeatMode {
+            case .off: return restrictions.canRepeatContext
+            case .context: return restrictions.canRepeatTrack
+            default: return true // Turning repeat off adds no repeat restriction.
+            }
+        }
+    }
+
+    private func restrictionMessage(_ command: Command, free: Bool, state: any SPTAppRemotePlayerState) -> String {
+        let freeSong = free && !state.track.isAdvertisement && !state.track.isEpisode
+        let premium = " This action requires a Spotify Premium account."
+        switch command {
+        case .previous:
+            return freeSong ? "Going back to the previous song is unavailable." + premium
+                : "Spotify doesn’t allow going back to the previous song right now."
+        case .seek:
+            return freeSong ? "Seeking in this song is unavailable." + premium
+                : "Spotify doesn’t allow seeking in this song right now."
+        case .repeatMode:
+            return freeSong ? "This repeat mode is unavailable." + premium
+                : "Spotify doesn’t allow this repeat mode right now."
+        case .shuffle:
+            return freeSong ? "Changing shuffle is unavailable." + premium
+                : "Spotify doesn’t allow changing shuffle right now."
+        case .next:
+            return freeSong ? "You have run out of Spotify skips as a Spotify Free member."
+                : "Spotify doesn’t allow skipping this song right now."
+        case .togglePlayPause:
+            return "Spotify couldn’t change playback right now."
+        }
+    }
+
+    @discardableResult
+    private func execute(_ command: Command) async -> Bool {
         guard isConnected, appRemote.isConnected, let api = appRemote.playerAPI else {
             report("Connect to Spotify before using playback controls.")
-            return
+            return false
         }
-        guard !commandPending else { return }
+        guard !commandPending, !Task.isCancelled else { return false }
         commandPending = true
-        let completion: SPTAppRemoteCallback = { [weak self] _, error in
-            MainActor.assumeIsolated {
-                guard let self else { return }
-                self.commandPending = false
-                if let error {
-                    self.reportControlFailure(error, command: command)
-                } else {
-                    self.errorMessage = nil
-                    self.refreshPlayerState()
-                }
-            }
-        }
-        switch command {
-        case .togglePlayPause:
-            if isPaused { api.resume(completion) } else { api.pause(completion) }
-        case .next: api.skip(toNext: completion)
-        case .previous: api.skip(toPrevious: completion)
-        }
-    }
-
-    /// Check the account connected to the Spotify app, which may differ from Web API sign-in.
-    /// A command error alone does not establish that the user has a Free account.
-    private func reportControlFailure(_ error: Error, command: Command) {
-        let fallback = "Spotify couldn't complete that control (code \((error as NSError).code))."
-        switch command {
-        case .togglePlayPause:
-            report(fallback)
-            return
-        case .next:
-            // -2001 means a rejected request, not necessarily an exhausted skip allowance.
-            let failure = error as NSError
-            guard failure.domain == SPTAppRemoteErrorDomain, failure.code == -2001 else {
-                report(fallback)
-                return
-            }
-        case .previous:
-            break
-        }
-        guard let userAPI = appRemote.userAPI else {
-            report(fallback)
-            return
-        }
         let connection = connectionGeneration
-        commandPending = true
-        userAPI.fetchCapabilities(callback: { [weak self] result, capabilityError in
-            MainActor.assumeIsolated {
-                guard let self, self.isConnected,
-                      self.connectionGeneration == connection else { return }
-                self.commandPending = false
-                if capabilityError == nil,
-                   let capabilities = result as? SPTAppRemoteUserCapabilities,
-                   !capabilities.canPlayOnDemand {
-                    if case .next = command {
-                        self.reportSkipRestriction(fallback: fallback, connection: connection)
-                    } else {
-                        self.report("This action requires a Spotify Premium account")
-                    }
-                } else {
-                    // Unknown account status and unrelated Premium errors retain the original message.
-                    self.report(fallback)
-                }
+        defer { if connection == connectionGeneration { commandPending = false } }
+        guard let state = await fetchState() else {
+            if !Task.isCancelled, connection == connectionGeneration {
+                report("Couldn’t check Spotify playback controls. Please try again.")
             }
-        })
-    }
-
-    private func reportSkipRestriction(fallback: String, connection: UUID) {
-        guard let api = appRemote.playerAPI else {
-            report(fallback)
-            return
+            return false
         }
-        commandPending = true
-        // Read fresh restrictions after the rejection: the last allowed skip may have just been used.
-        api.getPlayerState { [weak self] result, error in
-            MainActor.assumeIsolated {
-                guard let self, self.isConnected,
-                      self.connectionGeneration == connection else { return }
-                self.commandPending = false
-                if error == nil, let state = result as? SPTAppRemotePlayerState,
-                   !state.track.isAdvertisement, !state.track.isEpisode,
-                   !state.playbackRestrictions.canSkipNext {
-                    self.report("You have run out of Spotify skips")
-                } else {
-                    self.report(fallback)
+        guard !Task.isCancelled, isConnected, connection == connectionGeneration else { return false }
+        if !isAllowed(command, state: state) {
+            let free = await canPlayOnDemand() == false
+            guard !Task.isCancelled, connection == connectionGeneration else { return false }
+            report(restrictionMessage(command, free: free, state: state))
+            return false
+        }
+        // A held seek must never jump into a new track or keep issuing requests at an endpoint.
+        if case .seek(let offset) = command {
+            guard state.track.uri == trackURI else { return false }
+            let end = max(Double(state.track.duration) - 500, 0)
+            if offset < 0 && state.playbackPosition <= 0 { return false }
+            if offset > 0 && Double(state.playbackPosition) >= end { return false }
+        }
+        let error: Error? = await withCheckedContinuation { continuation in
+            let completion: SPTAppRemoteCallback = { _, error in continuation.resume(returning: error) }
+            switch command {
+            case .togglePlayPause:
+                if state.isPaused { api.resume(completion) } else { api.pause(completion) }
+            case .next: api.skip(toNext: completion)
+            case .previous: api.skip(toPrevious: completion)
+            case .seek(let offset):
+                let position = min(max(Double(state.playbackPosition) + offset * 1000, 0),
+                                   max(Double(state.track.duration) - 500, 0))
+                api.seek(toPosition: Int(position), callback: completion)
+            case .shuffle:
+                api.setShuffle(!state.playbackOptions.isShuffling, callback: completion)
+            case .repeatMode:
+                let next: SPTAppRemotePlaybackOptionsRepeatMode
+                switch state.playbackOptions.repeatMode {
+                case .off: next = .context
+                case .context: next = .track
+                default: next = .off
                 }
+                api.setRepeatMode(next, callback: completion)
             }
         }
+        guard !Task.isCancelled, isConnected, connection == connectionGeneration else { return false }
+        if let error {
+            // Restrictions can change between checking the state and sending the command.
+            if let latest = await fetchState(), !isAllowed(command, state: latest) {
+                let free = await canPlayOnDemand() == false
+                guard !Task.isCancelled, connection == connectionGeneration else { return false }
+                report(restrictionMessage(command, free: free, state: latest))
+            } else if !Task.isCancelled, connection == connectionGeneration {
+                report("Spotify couldn't complete that control (code \((error as NSError).code)).")
+            }
+            return false
+        }
+        errorMessage = nil
+        refreshPlayerState()
+        return true
     }
 
     @ObservationIgnored private var connectionGeneration = UUID()
 
     private func clearConnection() {
+        endFastSeek()
         connectionGeneration = UUID()
         isConnected = false
         isConnecting = false
@@ -428,6 +540,13 @@ final class SpotifyManager: NSObject, @preconcurrency SPTAppRemoteDelegate, @pre
         album = track.album.name
         duration = Double(track.duration) / 1000
         currentTime = min(max(Double(playerState.playbackPosition) / 1000, 0), duration)
+        isShuffling = playerState.playbackOptions.isShuffling
+        switch playerState.playbackOptions.repeatMode {
+        case .context: repeatMode = .all
+        case .track: repeatMode = .one
+        default: repeatMode = .off
+        }
+        if changed { endFastSeek() }
         isPaused = playerState.isPaused
         progressTask?.cancel()
         if !isPaused {
