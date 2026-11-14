@@ -5,6 +5,7 @@ nonisolated enum Screen: Hashable, Sendable {
     case main
     case music, songs, artists, albums, playlists
     case spotifyArtist(String)
+    case spotifyPlaylist(String)
     case artist(String)
     case artistSongs(String)
     case album(String)
@@ -33,6 +34,7 @@ nonisolated enum MenuAction: Equatable, Sendable {
     case startTutorial
     case connectSpotify
     case refreshSpotify
+    case refreshSpotifyPlaylist(String)
     case playSpotify(String)
     case none
 }
@@ -55,6 +57,7 @@ nonisolated struct MenuContext: Sendable {
     var cloudState: CloudState = .notConfigured
     var spotify = SpotifyLibrarySnapshot()
     var spotifyState = SpotifyLibraryState.disconnected
+    var spotifyPlaylistContents: [String: SpotifyPlaylistContents] = [:]
     var hasNowPlaying = false
     var clickSound = true
     var haptics = true
@@ -105,9 +108,33 @@ nonisolated enum MenuBuilder {
 
         case .playlists:
             let rows = c.spotify.playlists.map {
-                MenuItem(id: $0.uri, title: $0.name, detail: "Spotify", action: .playSpotify($0.uri))
+                MenuItem(id: $0.uri, title: $0.name, detail: "Spotify", action: .push(.spotifyPlaylist($0.id)))
             }
             return rows + spotifyFooter(c.spotifyState, hasRows: !rows.isEmpty, empty: "No Spotify playlists")
+
+        case .spotifyPlaylist(let id):
+            guard let playlist = c.spotify.playlists.first(where: { $0.id == id }) else {
+                return [placeholder("Playlist no longer in library")]
+            }
+            let contents = c.spotifyPlaylistContents[id] ?? SpotifyPlaylistContents()
+            var rows = [MenuItem(id: "playAll", title: "Play All", action: .playSpotify(playlist.uri))]
+            rows += contents.songs.enumerated().map { index, song in
+                MenuItem(id: "playlist:\(id):\(index)", title: song.name,
+                         detail: song.canPlay ? song.artists.map(\.name).joined(separator: ", ") : "Unavailable",
+                         action: song.canPlay ? .playSpotify(song.uri) : .none)
+            }
+            switch contents.state {
+            case .loading: rows.append(placeholder("Loading playlist…"))
+            case .ready:
+                if contents.songs.isEmpty { rows.append(placeholder("No supported songs in playlist")) }
+                rows.append(MenuItem(id: "refresh", title: "Refresh Playlist", action: .refreshSpotifyPlaylist(id)))
+            case .disconnected:
+                rows.append(MenuItem(id: "connect", title: "Connect to Spotify", action: .connectSpotify))
+            case .failed(let message):
+                rows.append(placeholder(message))
+                rows.append(MenuItem(id: "retry", title: "Retry Playlist", action: .refreshSpotifyPlaylist(id)))
+            }
+            return rows
 
         case .spotifyArtist(let id):
             guard let artist = c.spotify.artists.first(where: { $0.id == id }) else {

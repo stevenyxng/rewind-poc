@@ -102,6 +102,7 @@ final class SpotifyManager: NSObject, @preconcurrency SPTAppRemoteDelegate, @pre
         commandPending = true
         defer { commandPending = false }
         errorMessage = nil
+        shouldReconnect = true
         if !isConnected || !appRemote.isConnected {
             let opened: Bool = await withCheckedContinuation { continuation in
                 appRemote.authorizeAndPlayURI(uri) { opened in
@@ -125,6 +126,26 @@ final class SpotifyManager: NSObject, @preconcurrency SPTAppRemoteDelegate, @pre
                 }
             }
         }
+    }
+
+    /// Release Spotify before local audio takes over, keeping controls and artwork on the same source.
+    func yieldToLocalPlayback() async -> Bool {
+        guard !commandPending, !isAuthorizingLibrary else { return false }
+        if appRemote.isConnected, let api = appRemote.playerAPI {
+            commandPending = true
+            let paused: Bool = await withCheckedContinuation { continuation in
+                api.pause { _, error in continuation.resume(returning: error == nil) }
+            }
+            commandPending = false
+            guard paused else {
+                report("Couldn't pause Spotify before starting local music.")
+                return false
+            }
+        }
+        shouldReconnect = false
+        appRemote.disconnect()
+        clearConnection()
+        return true
     }
 
     func perform(_ command: Command) {
@@ -163,6 +184,7 @@ final class SpotifyManager: NSObject, @preconcurrency SPTAppRemoteDelegate, @pre
         artworkRequest = UUID()
     }
 
+    private var shouldReconnect = true
     private var isAppActive = false
     private var isConnecting = false
 
@@ -178,6 +200,7 @@ final class SpotifyManager: NSObject, @preconcurrency SPTAppRemoteDelegate, @pre
 
     /// Returns whether Spotify could open, not whether authorization succeeded.
     func connect() async -> Bool {
+        shouldReconnect = true
         errorMessage = nil
         Self.logger.notice("Starting Spotify authorization")
         return await withCheckedContinuation { continuation in
@@ -202,7 +225,7 @@ final class SpotifyManager: NSObject, @preconcurrency SPTAppRemoteDelegate, @pre
 
     private func connectIfReady() {
         Self.logger.notice("Connection readiness: active=\(self.isAppActive), tokenPresent=\(self.accessToken != nil), connected=\(self.appRemote.isConnected), connecting=\(self.isConnecting)")
-        guard isAppActive,
+        guard isAppActive, shouldReconnect,
               appRemote.connectionParameters.accessToken != nil,
               !appRemote.isConnected,
               !isConnecting else {

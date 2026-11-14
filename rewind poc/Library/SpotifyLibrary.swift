@@ -75,6 +75,35 @@ nonisolated struct SpotifySavedSong: Decodable, Sendable {
     }
 }
 
+nonisolated struct SpotifyPlaylistItem: Decodable, Sendable {
+    let song: SpotifyLibrarySong?
+    private enum CodingKeys: String, CodingKey { case item, track, is_local }
+    private enum ItemKeys: String, CodingKey { case id, uri }
+
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let key: CodingKeys = container.contains(.item) ? .item : .track
+        guard try container.decodeIfPresent(Bool.self, forKey: .is_local) != true,
+              container.contains(key), try !container.decodeNil(forKey: key) else {
+            song = nil
+            return
+        }
+        let item = try container.nestedContainer(keyedBy: ItemKeys.self, forKey: key)
+        guard let id = try item.decodeIfPresent(String.self, forKey: .id), !id.isEmpty,
+              let uri = try item.decodeIfPresent(String.self, forKey: .uri),
+              uri.hasPrefix("spotify:track:") else {
+            song = nil
+            return
+        }
+        song = try container.decode(SpotifyLibrarySong.self, forKey: key)
+    }
+}
+
+nonisolated struct SpotifyPlaylistContents: Sendable {
+    var songs: [SpotifyLibrarySong] = []
+    var state: SpotifyLibraryState = .loading
+}
+
 nonisolated struct SpotifyArtistPage: Decodable, Sendable {
     let artists: SpotifyPage<SpotifyLibraryArtist>
 }
@@ -119,6 +148,17 @@ final class SpotifyLibraryAPI {
             artists: unique(artists).sorted { Track.sortKey($0.name) < Track.sortKey($1.name) },
             playlists: unique(playlists).sorted { Track.sortKey($0.name) < Track.sortKey($1.name) }
         )
+    }
+
+    func fetchPlaylistSongs(id: String) async throws -> [SpotifyLibrarySong] {
+        guard !id.isEmpty, id.allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber) }) else {
+            throw SpotifyLibraryError.invalidResponse
+        }
+        let items: [SpotifyPlaylistItem] = try await pages(path: "/v1/playlists/\(id)/items?limit=50") {
+            try JSONDecoder().decode(SpotifyPage<SpotifyPlaylistItem>.self, from: $0)
+        }
+        // Preserve playlist order and repeated songs.
+        return items.compactMap(\.song)
     }
 
     private func unique<T: Identifiable>(_ items: [T]) -> [T] {
@@ -178,12 +218,54 @@ final class SpotifyLibraryAPI {
 @MainActor
 @Observable
 final class SpotifyLibrary {
+    private(set) var playlistContents: [String: SpotifyPlaylistContents] = [:]
     private(set) var snapshot = SpotifyLibrarySnapshot()
     private(set) var state = SpotifyLibraryState.disconnected
     @ObservationIgnored var onChange: (() -> Void)?
     @ObservationIgnored private let api: SpotifyLibraryAPI
 
     init(api: SpotifyLibraryAPI) { self.api = api }
+
+    /// Loads playlist tracks even if their song lists have never been opened.
+    /// A playlist denied by Spotify is excluded; network/auth failures abort rather than bias the pool.
+    func songsForShuffle() async throws -> (songs: [SpotifyLibrarySong], skippedPlaylists: Int) {
+        guard state != .loading else { throw SpotifyAuthError.busy }
+        if state == .disconnected { return ([], 0) }
+        if case .failed = state { throw SpotifyLibraryError.invalidResponse }
+        var songs = snapshot.songs
+        var skipped = 0
+        for playlist in snapshot.playlists {
+            try Task.checkCancellation()
+            do {
+                let tracks = try await api.fetchPlaylistSongs(id: playlist.id)
+                playlistContents[playlist.id] = SpotifyPlaylistContents(songs: tracks, state: .ready)
+                songs += tracks
+            } catch SpotifyLibraryError.forbidden {
+                skipped += 1
+            }
+        }
+        onChange?()
+        return (songs, skipped)
+    }
+
+    func loadPlaylist(id: String) async {
+        guard playlistContents[id]?.state != .loading else { return }
+        var contents = playlistContents[id] ?? SpotifyPlaylistContents()
+        contents.state = .loading
+        playlistContents[id] = contents
+        defer { onChange?() }
+        do {
+            contents.songs = try await api.fetchPlaylistSongs(id: id)
+            contents.state = .ready
+        } catch SpotifyAuthError.signInRequired {
+            contents = SpotifyPlaylistContents(state: .disconnected)
+        } catch let error as SpotifyLibraryError {
+            contents.state = .failed(error.localizedDescription)
+        } catch {
+            contents.state = .failed("Couldn't load playlist. Please try again.")
+        }
+        playlistContents[id] = contents
+    }
 
     func refresh() async {
         guard state != .loading else { return }
@@ -195,9 +277,11 @@ final class SpotifyLibrary {
             snapshot = updated
             state = .ready
         } catch SpotifyAuthError.signInRequired {
+            playlistContents = [:]
             snapshot = SpotifyLibrarySnapshot()
             state = .disconnected
         } catch SpotifyAuthError.missingPermissions {
+            playlistContents = [:]
             snapshot = SpotifyLibrarySnapshot()
             state = .disconnected
         } catch is CancellationError {

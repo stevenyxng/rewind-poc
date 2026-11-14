@@ -123,6 +123,43 @@ struct SpotifyLibraryTests {
         #expect(library.state == .disconnected)
     }
 
+    @Test func playlistPagesPreserveOrderAndRepeatedSongs() async throws {
+        var count = 0
+        let api = SpotifyLibraryAPI(token: { _ in "test" }, transport: { request in
+            count += 1
+            #expect(request.url?.path == "/v1/playlists/p1/items")
+            if count == 1 {
+                return try response(request, "{\"items\":[{\"item\":\(Self.song)}, {\"item\":null}, {\"item\":{\"id\":\"e1\",\"uri\":\"spotify:episode:e1\"}}],\"next\":\"https://api.spotify.com/v1/playlists/p1/items?offset=50\"}")
+            }
+            return try response(request, "{\"items\":[{\"track\":\(Self.song)}],\"next\":null}")
+        })
+        let songs = try await api.fetchPlaylistSongs(id: "p1")
+        #expect(songs.map(\.id) == ["s1", "s1"])
+        #expect(count == 2)
+        var context = MenuContext()
+        context.spotify.playlists = [SpotifyLibraryPlaylist(id: "p1", name: "Test", uri: "spotify:playlist:p1")]
+        context.spotifyPlaylistContents["p1"] = SpotifyPlaylistContents(songs: songs, state: .ready)
+        let rows = MenuBuilder.items(for: .spotifyPlaylist("p1"), context: context)
+        #expect(rows.map(\.title) == ["Play All", "Song", "Song", "Refresh Playlist"])
+        #expect(Set(rows.map(\.id)).count == rows.count)
+        #expect(rows[0].action == .playSpotify("spotify:playlist:p1"))
+        #expect(rows[1].action == .playSpotify("spotify:track:s1"))
+    }
+
+    @Test func playlistFailureProvidesRetryAndKeepsOtherLibraryData() async {
+        let api = SpotifyLibraryAPI(token: { _ in "test" }, transport: { request in
+            try response(request, "{}", status: 403)
+        })
+        let library = SpotifyLibrary(api: api)
+        await library.loadPlaylist(id: "p1")
+        var context = MenuContext()
+        context.spotify.playlists = [SpotifyLibraryPlaylist(id: "p1", name: "Test", uri: "spotify:playlist:p1")]
+        context.spotifyPlaylistContents = library.playlistContents
+        let rows = MenuBuilder.items(for: .spotifyPlaylist("p1"), context: context)
+        #expect(rows.contains { $0.action == .refreshSpotifyPlaylist("p1") })
+        #expect(rows.first?.action == .playSpotify("spotify:playlist:p1"))
+    }
+
     @Test func categoryRowsRouteToSpotifyAndKeepLocalSongs() throws {
         let decoder = JSONDecoder()
         let song = try decoder.decode(SpotifyLibrarySong.self, from: Data(Self.song.utf8))
@@ -137,7 +174,7 @@ struct SpotifyLibraryTests {
         #expect(songs.first { $0.id == song.uri }?.action == .playSpotify(song.uri))
         #expect(MenuBuilder.items(for: .artists, context: context).contains { $0.action == .push(.spotifyArtist("a1")) })
         #expect(MenuBuilder.items(for: .spotifyArtist("a1"), context: context).contains { $0.action == .playSpotify(song.uri) })
-        #expect(MenuBuilder.items(for: .playlists, context: context).first?.action == .playSpotify(playlist.uri))
+        #expect(MenuBuilder.items(for: .playlists, context: context).first?.action == .push(.spotifyPlaylist(playlist.id)))
         let unavailableJSON = Self.song.dropLast() + #", "is_playable":false}"#
         let unavailable = try decoder.decode(SpotifyLibrarySong.self, from: Data(unavailableJSON.utf8))
         context.spotify.songs = [unavailable]

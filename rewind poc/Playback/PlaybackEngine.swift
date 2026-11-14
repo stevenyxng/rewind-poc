@@ -151,6 +151,8 @@ final class PlaybackEngine {
 
     /// Stops and clears the queue (e.g. the playing track was deleted).
     func stop() {
+        loadToken += 1
+        endFastSeek()
         player.pause()
         player.replaceCurrentItem(with: nil)
         queue = PlaybackQueue()
