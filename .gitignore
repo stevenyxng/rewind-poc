@@ -1,2 +1,4 @@
 rewind poc/GoogleService-Info.plist
 *.md
+UserInterfaceState.xcuserstate
+.DS_store
