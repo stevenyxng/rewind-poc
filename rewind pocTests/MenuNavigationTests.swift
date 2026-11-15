@@ -14,16 +14,24 @@ struct MenuNavigationTests {
         MenuNavigator { MenuBuilder.items(for: $0, context: context) }
     }
 
-    @Test func mainMenuShowsNowPlayingOnlyWhileLoaded() {
-        var c = context
-        #expect(MenuBuilder.items(for: .main, context: c).map(\.title) == ["Music", "Shuffle Songs", "Settings"])
-        c.hasNowPlaying = true
-        #expect(MenuBuilder.items(for: .main, context: c).map(\.title) == ["Music", "Now Playing", "Shuffle Songs", "Settings"])
+    @Test func currentlyPlayingRemainsAccessibleAfterSettings() {
+        for loaded in [false, true] {
+            var c = context
+            c.hasNowPlaying = loaded
+            #expect(MenuBuilder.items(for: .main, context: c).map(\.title)
+                    == ["Music", "Shuffle Songs", "Settings", "Currently Playing"])
+            let nav = navigator(c)
+            for _ in 0..<3 { _ = nav.move(.forward) }
+            #expect(nav.select() == .push(.nowPlaying))
+            #expect(nav.screen == .nowPlaying)
+            #expect(nav.back())
+            #expect(nav.current.selected == 3)
+        }
     }
 
     @Test func musicAndSettingsMenus() {
         #expect(MenuBuilder.items(for: .music, context: context).map(\.title)
-                == ["Songs", "Artists", "Albums", "Local Files", "Cloud"])
+                == ["Songs", "Artists", "Albums", "Playlists", "Local Files", "Cloud"])
         let settings = MenuBuilder.items(for: .settings, context: context).map(\.title)
         for required in ["Appearance", "Click Sound", "Haptics", "Haptics Lab", "Import Files", "About"] {
             #expect(settings.contains(required))
@@ -48,14 +56,13 @@ struct MenuNavigationTests {
     }
 
     @Test func moveHitsWallsAndNeverWraps() {
-        let nav = navigator(context)          // main: 3 rows
+        let nav = navigator(context)          // main: 4 rows
         #expect(nav.move(.backward) == .wall)
         #expect(nav.current.selected == 0)
-        #expect(nav.move(.forward) == .moved)
-        #expect(nav.move(.forward) == .moved)
-        #expect(nav.current.selected == 2)
+        for _ in 0..<3 { #expect(nav.move(.forward) == .moved) }
+        #expect(nav.current.selected == 3)
         #expect(nav.move(.forward) == .wall)
-        #expect(nav.current.selected == 2)
+        #expect(nav.current.selected == 3)
     }
 
     @Test func selectPushesAndMenuGoesBack() {

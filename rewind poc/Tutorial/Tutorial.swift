@@ -29,7 +29,7 @@ nonisolated enum TutorialStep: Int, CaseIterable, Sendable {
         case .back: "Press MENU to go back one level."
         case .playPause: "The bottom button plays or pauses the current song. Give it a press."
         case .skip: "Left and right skip songs. Hold one to rewind or fast-forward. Try one."
-        case .done: "On Now Playing, spin the wheel to scrub through a song. Press the center button to finish."
+        case .done: "Currently Playing appears when a song is available. Spin the wheel to reveal the menu. Press the center button to finish."
         }
     }
 
