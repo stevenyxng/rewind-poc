@@ -94,7 +94,7 @@ final class SpotifyManager: NSObject, @preconcurrency SPTAppRemoteDelegate, @pre
 
     /// Spotify owns audio playback; library metadata never becomes a local audio URL.
     func play(uri: String) async -> Bool {
-        guard ["spotify:track:", "spotify:artist:", "spotify:playlist:"].contains(where: uri.hasPrefix) else {
+        guard ["spotify:track:", "spotify:artist:", "spotify:playlist:", "spotify:album:"].contains(where: uri.hasPrefix) else {
             report("This Spotify item can't be played.")
             return false
         }

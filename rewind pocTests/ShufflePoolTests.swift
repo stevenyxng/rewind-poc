@@ -66,6 +66,7 @@ struct ShufflePoolTests {
             let body: String
             var status = 200
             switch url.path {
+            case "/v1/me/albums": body = #"{"items":[],"next":null}"#
             case "/v1/me/tracks":
                 body = #"{"items":[{"track":{"id":"s1","name":"Liked","uri":"spotify:track:s1","artists":[]}}],"next":null}"#
             case "/v1/me/following": body = #"{"artists":{"items":[],"next":null}}"#

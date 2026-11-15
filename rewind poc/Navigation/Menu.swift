@@ -6,6 +6,7 @@ nonisolated enum Screen: Hashable, Sendable {
     case music, songs, artists, albums, playlists
     case spotifyArtist(String)
     case spotifyPlaylist(String)
+    case spotifyAlbum(String)
     case artist(String)
     case artistSongs(String)
     case album(String)
@@ -137,7 +138,12 @@ nonisolated enum MenuBuilder {
             return rows
 
         case .spotifyArtist(let id):
-            let songs = c.spotify.songs.filter { $0.artists.contains(where: { $0.id == id }) }
+            let albumSongIDs = Set(c.spotify.albums
+                .filter { $0.artists.contains(where: { $0.id == id }) }
+                .flatMap(\.songs).map(\.id))
+            let songs = c.spotify.songs.filter {
+                albumSongIDs.contains($0.id) || $0.artists.contains(where: { $0.id == id })
+            }
             return songs.isEmpty ? [placeholder("No songs by this artist")] : spotifySongRows(songs)
 
         case .artist(let artist):
@@ -151,8 +157,19 @@ nonisolated enum MenuBuilder {
 
         case .albums:
             let albums = Set(c.allTracks.map(\.album)).sorted { Track.sortKey($0) < Track.sortKey($1) }
-            guard !albums.isEmpty else { return [placeholder("No albums")] }
-            return albums.map { MenuItem(id: "album:" + $0, title: $0, action: .push(.album($0))) }
+            let local = albums.map { MenuItem(id: "album:" + $0, title: $0, action: .push(.album($0))) }
+            let spotify = c.spotify.albums.map {
+                MenuItem(id: $0.uri, title: $0.name, detail: "Spotify", action: .push(.spotifyAlbum($0.id)))
+            }
+            let rows = (local + spotify).sorted { Track.sortKey($0.title) < Track.sortKey($1.title) }
+            return rows + spotifyFooter(c.spotifyState, hasRows: !rows.isEmpty, empty: "No albums")
+
+        case .spotifyAlbum(let id):
+            guard let album = c.spotify.albums.first(where: { $0.id == id }) else {
+                return [placeholder("Album no longer in library")]
+            }
+            return [MenuItem(id: "playAll", title: "Play All", action: .playSpotify(album.uri))]
+                + spotifySongRows(album.songs)
 
         case .album(let album):
             // Album order isn't in our metadata, so keep title order.

@@ -24,6 +24,20 @@ nonisolated struct SpotifyLibraryPlaylist: Decodable, Equatable, Sendable, Ident
     let uri: String
 }
 
+nonisolated struct SpotifyLibraryAlbum: Decodable, Sendable, Identifiable {
+    let id: String
+    let name: String
+    let uri: String
+    let artists: [SpotifyLibraryArtist]
+    var songs: [SpotifyLibrarySong] = []
+
+    private enum CodingKeys: String, CodingKey { case id, name, uri, artists }
+}
+
+nonisolated struct SpotifySavedAlbum: Decodable, Sendable {
+    let album: SpotifyLibraryAlbum?
+}
+
 nonisolated enum SpotifyLibraryState: Equatable, Sendable {
     case disconnected, loading, ready, failed(String)
 }
@@ -32,6 +46,7 @@ nonisolated struct SpotifyLibrarySnapshot: Sendable {
     var songs: [SpotifyLibrarySong] = []
     var artists: [SpotifyLibraryArtist] = []
     var playlists: [SpotifyLibraryPlaylist] = []
+    var albums: [SpotifyLibraryAlbum] = []
 }
 
 nonisolated enum SpotifyLibraryError: LocalizedError {
@@ -137,15 +152,30 @@ final class SpotifyLibraryAPI {
         let saved: [SpotifySavedSong] = try await pages(path: "/v1/me/tracks?limit=50") { data in
             try JSONDecoder().decode(SpotifyPage<SpotifySavedSong>.self, from: data)
         }
-        // Artists come from saved songs, independent of which artists the user follows.
-        let artists = saved.compactMap(\.track).flatMap(\.artists)
+        let savedAlbums: [SpotifySavedAlbum] = try await pages(path: "/v1/me/albums?limit=50") {
+            try JSONDecoder().decode(SpotifyPage<SpotifySavedAlbum>.self, from: $0)
+        }
+        var albums = unique(savedAlbums.compactMap(\.album))
+        for index in albums.indices {
+            let id = albums[index].id
+            guard !id.isEmpty, id.allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber) }) else {
+                throw SpotifyLibraryError.invalidResponse
+            }
+            // Fetch every page rather than relying on the album's embedded track preview.
+            albums[index].songs = try await pages(path: "/v1/albums/\(id)/tracks?limit=50") {
+                try JSONDecoder().decode(SpotifyPage<SpotifyLibrarySong>.self, from: $0)
+            }
+        }
+        let songs = unique(saved.compactMap(\.track) + albums.flatMap(\.songs))
+        let artists = songs.flatMap(\.artists) + albums.flatMap(\.artists)
         let playlists: [SpotifyLibraryPlaylist] = try await pages(path: "/v1/me/playlists?limit=50") { data in
             try JSONDecoder().decode(SpotifyPage<SpotifyLibraryPlaylist>.self, from: data)
         }
         return SpotifyLibrarySnapshot(
-            songs: unique(saved.compactMap(\.track)).sorted { Track.sortKey($0.name) < Track.sortKey($1.name) },
+            songs: songs.sorted { Track.sortKey($0.name) < Track.sortKey($1.name) },
             artists: unique(artists).sorted { Track.sortKey($0.name) < Track.sortKey($1.name) },
-            playlists: unique(playlists).sorted { Track.sortKey($0.name) < Track.sortKey($1.name) }
+            playlists: unique(playlists).sorted { Track.sortKey($0.name) < Track.sortKey($1.name) },
+            albums: albums.sorted { Track.sortKey($0.name) < Track.sortKey($1.name) }
         )
     }
 

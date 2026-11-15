@@ -45,7 +45,7 @@ struct SpotifyLibraryTests {
         #expect(result.songs.map(\.id) == ["s1"])
         #expect(result.artists.map(\.id) == ["a1"])
         #expect(result.playlists.map(\.id) == ["p1"])
-        #expect(paths == ["/v1/me/tracks", "/v1/me/tracks", "/v1/me/playlists"])
+        #expect(paths == ["/v1/me/tracks", "/v1/me/tracks", "/v1/me/albums", "/v1/me/playlists"])
     }
 
     @Test func groupsSavedSongsUnderEveryCreditedArtistWithoutFollowing() async throws {
@@ -72,6 +72,52 @@ struct SpotifyLibraryTests {
         }
     }
 
+    @Test func savedAlbumsPopulateAllCategoriesAndLoadEveryTrackPage() async throws {
+        let album = #"{"id":"b1","name":"Album","uri":"spotify:album:b1","artists":[{"id":"albumArtist","name":"Album Artist","uri":"spotify:artist:albumArtist"}]}"#
+        let albumOnlySong = #"{"id":"s2","name":"Album Only","uri":"spotify:track:s2","artists":[{"id":"guest","name":"Guest","uri":"spotify:artist:guest"}]}"#
+        var trackPages = 0
+        var albumPages = 0
+        let api = SpotifyLibraryAPI(token: { _ in "test" }, transport: { request in
+            let url = try #require(request.url)
+            switch url.path {
+            case "/v1/me/tracks":
+                return try response(request, "{\"items\":[{\"track\":\(Self.song)}],\"next\":null}")
+            case "/v1/me/albums":
+                albumPages += 1
+                if albumPages == 1 {
+                    return try response(request, "{\"items\":[{\"album\":\(album)}],\"next\":\"https://api.spotify.com/v1/me/albums?offset=50\"}")
+                }
+                return try response(request, #"{"items":[null,{"album":null}],"next":null}"#)
+            case "/v1/albums/b1/tracks":
+                trackPages += 1
+                if trackPages == 1 {
+                    return try response(request, "{\"items\":[\(Self.song)],\"next\":\"https://api.spotify.com/v1/albums/b1/tracks?offset=50\"}")
+                }
+                return try response(request, "{\"items\":[null,\(albumOnlySong)],\"next\":null}")
+            default:
+                return try response(request, #"{"items":[],"next":null}"#)
+            }
+        })
+        var context = MenuContext()
+        context.spotify = try await api.fetchLibrary()
+        context.spotifyState = .ready
+        #expect(albumPages == 2)
+        #expect(trackPages == 2)
+        #expect(Set(context.spotify.songs.map(\.id)) == ["s1", "s2"])
+        #expect(context.spotify.songs.count == 2)
+        #expect(Set(context.spotify.artists.map(\.id)) == ["a1", "guest", "albumArtist"])
+        #expect(MenuBuilder.items(for: .albums, context: context).contains {
+            $0.title == "Album" && $0.action == .push(.spotifyAlbum("b1"))
+        })
+        let rows = MenuBuilder.items(for: .spotifyAlbum("b1"), context: context)
+        #expect(rows.map(\.title) == ["Play All", "Song", "Album Only"])
+        #expect(rows.first?.action == .playSpotify("spotify:album:b1"))
+        #expect(rows.last?.action == .playSpotify("spotify:track:s2"))
+        #expect(MenuBuilder.items(for: .songs, context: context).contains { $0.title == "Album Only" })
+        #expect(MenuBuilder.items(for: .spotifyArtist("guest"), context: context).first?.title == "Album Only")
+        #expect(MenuBuilder.items(for: .spotifyArtist("albumArtist"), context: context).count == 2)
+    }
+
     @Test func refreshesTokenOnceAfterUnauthorized() async throws {
         var requests = 0
         var forcedRefreshes = 0
@@ -85,7 +131,7 @@ struct SpotifyLibraryTests {
             return try response(request, emptyPage(for: request))
         })
         _ = try await api.fetchLibrary()
-        #expect(requests == 3)
+        #expect(requests == 4)
         #expect(forcedRefreshes == 1)
     }
 
