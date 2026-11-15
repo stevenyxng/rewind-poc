@@ -137,13 +137,8 @@ nonisolated enum MenuBuilder {
             return rows
 
         case .spotifyArtist(let id):
-            guard let artist = c.spotify.artists.first(where: { $0.id == id }) else {
-                return [placeholder("Artist no longer in library")]
-            }
             let songs = c.spotify.songs.filter { $0.artists.contains(where: { $0.id == id }) }
-            return [MenuItem(id: "play:" + artist.id, title: "Play " + artist.name,
-                             detail: "Spotify", action: .playSpotify(artist.uri))]
-                + (songs.isEmpty ? [placeholder("No liked songs by this artist")] : spotifySongRows(songs))
+            return songs.isEmpty ? [placeholder("No songs by this artist")] : spotifySongRows(songs)
 
         case .artist(let artist):
             let tracks = c.allTracks.filter { $0.artist == artist }

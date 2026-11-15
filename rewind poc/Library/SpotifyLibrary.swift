@@ -137,9 +137,8 @@ final class SpotifyLibraryAPI {
         let saved: [SpotifySavedSong] = try await pages(path: "/v1/me/tracks?limit=50") { data in
             try JSONDecoder().decode(SpotifyPage<SpotifySavedSong>.self, from: data)
         }
-        let artists: [SpotifyLibraryArtist] = try await pages(path: "/v1/me/following?type=artist&limit=50") { data in
-            try JSONDecoder().decode(SpotifyArtistPage.self, from: data).artists
-        }
+        // Artists come from saved songs, independent of which artists the user follows.
+        let artists = saved.compactMap(\.track).flatMap(\.artists)
         let playlists: [SpotifyLibraryPlaylist] = try await pages(path: "/v1/me/playlists?limit=50") { data in
             try JSONDecoder().decode(SpotifyPage<SpotifyLibraryPlaylist>.self, from: data)
         }

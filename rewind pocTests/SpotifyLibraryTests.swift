@@ -45,7 +45,31 @@ struct SpotifyLibraryTests {
         #expect(result.songs.map(\.id) == ["s1"])
         #expect(result.artists.map(\.id) == ["a1"])
         #expect(result.playlists.map(\.id) == ["p1"])
-        #expect(paths == ["/v1/me/tracks", "/v1/me/tracks", "/v1/me/following", "/v1/me/following", "/v1/me/playlists"])
+        #expect(paths == ["/v1/me/tracks", "/v1/me/tracks", "/v1/me/playlists"])
+    }
+
+    @Test func groupsSavedSongsUnderEveryCreditedArtistWithoutFollowing() async throws {
+        let first = SpotifyLibraryArtist(id: "a1", name: "First", uri: "spotify:artist:a1")
+        let guest = SpotifyLibraryArtist(id: "a2", name: "Guest", uri: "spotify:artist:a2")
+        let collaboration = #"{"id":"s1","name":"Duet","uri":"spotify:track:s1","artists":[{"id":"a1","name":"First","uri":"spotify:artist:a1"},{"id":"a2","name":"Guest","uri":"spotify:artist:a2"}]}"#
+        let api = SpotifyLibraryAPI(token: { _ in "test" }, transport: { request in
+            #expect(request.url?.path != "/v1/me/following")
+            if request.url?.path == "/v1/me/tracks" {
+                return try response(request, "{\"items\":[{\"track\":\(collaboration)},{\"track\":\(collaboration)}],\"next\":null}")
+            }
+            return try response(request, #"{"items":[],"next":null}"#)
+        })
+        var context = MenuContext()
+        context.spotify = try await api.fetchLibrary()
+        context.spotifyState = .ready
+        #expect(context.spotify.artists == [first, guest])
+        for artist in [first, guest] {
+            let rows = MenuBuilder.items(for: .spotifyArtist(artist.id), context: context)
+            #expect(rows.count == 1)
+            #expect(rows.first?.title == "Duet")
+            #expect(rows.first?.action == .playSpotify("spotify:track:s1"))
+            #expect(!rows.contains { $0.action == .playSpotify(artist.uri) })
+        }
     }
 
     @Test func refreshesTokenOnceAfterUnauthorized() async throws {
@@ -61,7 +85,7 @@ struct SpotifyLibraryTests {
             return try response(request, emptyPage(for: request))
         })
         _ = try await api.fetchLibrary()
-        #expect(requests == 4)
+        #expect(requests == 3)
         #expect(forcedRefreshes == 1)
     }
 
