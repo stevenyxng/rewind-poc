@@ -51,7 +51,6 @@ enum Experiment {
         record["config_source"] = configSource
         record["ended_at"] = ISO8601DateFormatter().string(from: now)
         record["app_version"] = AppModel.version
-        guard let data = try? JSONSerialization.data(withJSONObject: record, options: [.sortedKeys]) else { return }
 
         let backgroundTask = UIApplication.shared.beginBackgroundTask(withName: "usage-upload")
         Task {
@@ -60,11 +59,14 @@ enum Experiment {
                 var user = Auth.auth().currentUser
                 if user == nil { user = try await Auth.auth().signInAnonymously().user }
                 guard let user else { return }
+                record["uid"] = user.uid
+                let data = try JSONSerialization.data(withJSONObject: record, options: [.sortedKeys])
                 let name = "\(Int(now.timeIntervalSince1970 * 1000)).json"
                 let ref = Storage.storage().reference(withPath: "\(usageFolder)/\(user.uid)/\(name)")
                 let metadata = StorageMetadata()
                 metadata.contentType = "application/json"
                 _ = try await ref.putDataAsync(data, metadata: metadata)
+                print("Usage uploaded: \(ref.fullPath)")
             } catch {
                 print("Usage upload failed: \(error)")
             }

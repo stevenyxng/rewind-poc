@@ -1,4 +1,4 @@
-"""Merge downloaded usage/<uid>/<ms>.json session files into one CSV and print per-variant averages.
+"""Merge downloaded session .json files (usage/<uid>/<ms>.json, or all in one folder) into one CSV and print per-variant averages.
 
     python tools/usage_to_csv.py path/to/usage [out.csv]
 """
@@ -14,9 +14,9 @@ METRICS = ["duration_s", "detent_ticks", "scrub_ticks", "scrub_marks", "button_p
 
 def load(root: Path) -> list[dict]:
     rows = []
-    for path in sorted(root.glob("*/*.json")):
+    for path in sorted(root.rglob("*.json")):
         record = json.loads(path.read_text(encoding="utf-8"))
-        rows.append({"user": path.parent.name, "file": path.name, **record})
+        rows.append({"user": record.pop("uid", path.parent.name), "file": path.name, **record})
     return rows
 
 
@@ -25,7 +25,7 @@ def main() -> None:
     out = Path(sys.argv[2] if len(sys.argv) > 2 else "usage.csv")
     rows = load(root)
     if not rows:
-        sys.exit(f"No session files under {root}/<user>/*.json")
+        sys.exit(f"No session .json files under {root}")
 
     columns = list(dict.fromkeys(key for row in rows for key in row))
     with out.open("w", newline="", encoding="utf-8") as f:
