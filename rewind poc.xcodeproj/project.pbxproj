@@ -10,6 +10,8 @@
 		000000000000000300000001 /* FirebaseCore in Frameworks */ = {isa = PBXBuildFile; productRef = 000000000000000310000001 /* FirebaseCore */; };
 		000000000000000300000002 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = 000000000000000310000002 /* FirebaseAuth */; };
 		000000000000000300000003 /* FirebaseStorage in Frameworks */ = {isa = PBXBuildFile; productRef = 000000000000000310000003 /* FirebaseStorage */; };
+		000000000000000300000004 /* FirebaseAnalytics in Frameworks */ = {isa = PBXBuildFile; productRef = 000000000000000310000004 /* FirebaseAnalytics */; };
+		000000000000000300000005 /* FirebaseRemoteConfig in Frameworks */ = {isa = PBXBuildFile; productRef = 000000000000000310000005 /* FirebaseRemoteConfig */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -47,6 +49,8 @@
 				000000000000000300000001 /* FirebaseCore in Frameworks */,
 				000000000000000300000002 /* FirebaseAuth in Frameworks */,
 				000000000000000300000003 /* FirebaseStorage in Frameworks */,
+				000000000000000300000004 /* FirebaseAnalytics in Frameworks */,
+				000000000000000300000005 /* FirebaseRemoteConfig in Frameworks */,
 			);
 		};
 		000000000000000230000000 /* Frameworks */ = {
@@ -96,6 +100,8 @@
 				000000000000000310000001 /* FirebaseCore */,
 				000000000000000310000002 /* FirebaseAuth */,
 				000000000000000310000003 /* FirebaseStorage */,
+				000000000000000310000004 /* FirebaseAnalytics */,
+				000000000000000310000005 /* FirebaseRemoteConfig */,
 			);
 			productName = MyApp;
 			productReference = 000000000000000000000120 /* rewind poc.app */;
@@ -518,6 +524,16 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 000000000000000320000001 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
 			productName = FirebaseStorage;
+		};
+		000000000000000310000004 /* FirebaseAnalytics */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 000000000000000320000001 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAnalytics;
+		};
+		000000000000000310000005 /* FirebaseRemoteConfig */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 000000000000000320000001 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseRemoteConfig;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

@@ -26,6 +26,13 @@ final class AppModel {
     @ObservationIgnored private var scrubSettleTask: Task<Void, Never>?
     @ObservationIgnored private var messageTask: Task<Void, Never>?
 
+    /// Wheel engagement since the app last came to the foreground.
+    @ObservationIgnored private(set) var usage = UsageSession(startedAt: ProcessInfo.processInfo.systemUptime)
+    /// Analytics sink; a no-op unless Firebase is configured.
+    @ObservationIgnored var logEvent: (String, [String: Any]) -> Void = { _, _ in }
+    /// Applies the Remote Config haptic experiment; a no-op unless Firebase is configured.
+    @ObservationIgnored var applyExperiment: () async -> Void = {}
+
     init(settings: AppSettings, haptics: HapticsEngine, player: PlaybackEngine,
          library: LocalLibrary, cloud: any CloudMusicSource) {
         self.settings = settings
@@ -45,13 +52,19 @@ final class AppModel {
 
     /// Production wiring. Firebase is only touched if GoogleService-Info.plist is bundled.
     static func live() -> AppModel {
-        let cloud: any CloudMusicSource = FirebaseCloudSource.configureIfPossible()
-            ? FirebaseCloudSource() : UnconfiguredCloudSource()
-        return AppModel(settings: AppSettings(), haptics: HapticsEngine(), player: PlaybackEngine(),
-                        library: LocalLibrary(), cloud: cloud)
+        let firebase = FirebaseCloudSource.configureIfPossible()
+        let cloud: any CloudMusicSource = firebase ? FirebaseCloudSource() : UnconfiguredCloudSource()
+        let model = AppModel(settings: AppSettings(), haptics: HapticsEngine(), player: PlaybackEngine(),
+                             library: LocalLibrary(), cloud: cloud)
+        if firebase {
+            model.logEvent = HapticExperiment.log
+            model.applyExperiment = { [unowned model] in await HapticExperiment.apply(to: model.haptics) }
+        }
+        return model
     }
 
     func start() async {
+        await applyExperiment()
         await library.reconcile()
         navigator.clampCurrent()
         if !settings.tutorialSeen { startTutorial() }
@@ -95,7 +108,9 @@ final class AppModel {
             // The center button clicks on press-down (it can't become a spin). Ring buttons
             // click on release, once we know the touch wasn't the start of a spin.
             if button == .center { buttonClick(.center) }
-        case .rotationBegan, .rotation, .rotationEnded:
+        case .rotationBegan:
+            usage.record(.spin)
+        case .rotation, .rotationEnded:
             break                       // only whole detents (ticks) matter
         case .tick(let direction, let rate):
             tick(direction, rate: rate)
@@ -119,12 +134,14 @@ final class AppModel {
                 labDetent = target
                 haptics.detent()
                 clickSound.play()
+                usage.record(.detentTick, rate: rate)
             }
         default:
             // At either end of a list the wheel just stops: no haptic, no wrap-around.
             if navigator.move(direction) == .moved {
                 haptics.detent()
                 clickSound.play()
+                usage.record(.detentTick, rate: rate)
             }
         }
     }
@@ -140,8 +157,8 @@ final class AppModel {
         player.seek(to: position)
         switch feedback {
         case .none: break
-        case .tick: haptics.scrubTick(rate: rate); clickSound.play()
-        case .mark: haptics.scrubMark(); clickSound.play()
+        case .tick: haptics.scrubTick(rate: rate); clickSound.play(); usage.record(.scrubTick, rate: rate)
+        case .mark: haptics.scrubMark(); clickSound.play(); usage.record(.scrubMark, rate: rate)
         case .wall: break               // arrived at the start or end
         }
     }
@@ -150,6 +167,7 @@ final class AppModel {
     private func buttonClick(_ button: WheelButton) {
         haptics.button(button)
         clickSound.play()
+        usage.record(.buttonPress)
     }
 
     private func press(_ button: WheelButton) {
@@ -180,6 +198,18 @@ final class AppModel {
         }
     }
 
+    // MARK: Usage
+
+    func sceneBecameActive() {
+        usage = UsageSession(startedAt: clock())
+    }
+
+    func sceneEnteredBackground() {
+        guard !usage.isEmpty else { return }
+        logEvent("wheel_session", usage.summary(now: clock()))
+        usage = UsageSession(startedAt: clock())
+    }
+
     // MARK: Actions
 
     func perform(_ action: MenuAction) {
@@ -193,6 +223,7 @@ final class AppModel {
             let all = menuContext.allTracks
             guard !all.isEmpty else {
                 haptics.bump()
+                usage.record(.bump)
                 show("No songs yet. Import some in Settings.")
                 return
             }

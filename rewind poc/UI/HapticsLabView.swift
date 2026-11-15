@@ -33,7 +33,7 @@ struct HapticsLabView: View {
                 }
                 HStack {
                     Button("Reset to Defaults") { haptics.tuning.reset() }
-                        .disabled(haptics.tuning.isDefault)
+                        .disabled(!haptics.tuning.isCustomized)
                     Spacer()
                     Text(haptics.supportsCoreHaptics ? "Core Haptics" : "No Core Haptics (fallback)")
                         .font(Theme.monoFont)

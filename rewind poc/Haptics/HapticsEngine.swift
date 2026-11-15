@@ -51,6 +51,8 @@ nonisolated enum HapticParameter: String, CaseIterable, Identifiable, Sendable {
         case .scrubMarkSharpness: Spec(label: "30s mark sharpness", group: "Scrub", defaultValue: 0.60, range: 0...1)
         }
     }
+
+    func clamp(_ value: Double) -> Double { min(max(value, spec.range.lowerBound), spec.range.upperBound) }
 }
 
 /// Current values for every `HapticParameter`: defaults plus any Haptics Lab overrides.
@@ -58,13 +60,29 @@ nonisolated struct HapticsTuning: Equatable, Sendable {
     static let storageKey = "hapticsTuning.v1"
 
     private var overrides: [HapticParameter: Double] = [:]
+    /// A/B experiment values from Remote Config; sit between the defaults and Lab overrides. Not saved.
+    var remote: [HapticParameter: Double] = [:]
 
     subscript(_ p: HapticParameter) -> Double {
-        get { overrides[p] ?? p.spec.defaultValue }
-        set { overrides[p] = min(max(newValue, p.spec.range.lowerBound), p.spec.range.upperBound) }
+        get { overrides[p] ?? remote[p] ?? p.spec.defaultValue }
+        set { overrides[p] = p.clamp(newValue) }
     }
 
     var isDefault: Bool { HapticParameter.allCases.allSatisfy { self[$0] == $0.spec.defaultValue } }
+
+    /// Haptics Lab edits are in effect (they mask any experiment values).
+    var isCustomized: Bool { !overrides.isEmpty }
+
+    /// Parses a Remote Config `{"detentSharpness": 0.4, ...}` string; unknown keys are dropped.
+    static func remoteValues(json: String) -> [HapticParameter: Double] {
+        guard let data = json.data(using: .utf8),
+              let dict = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { return [:] }
+        var values: [HapticParameter: Double] = [:]
+        for (key, value) in dict {
+            if let p = HapticParameter(rawValue: key), let n = value as? NSNumber { values[p] = p.clamp(n.doubleValue) }
+        }
+        return values
+    }
 
     mutating func reset() { overrides = [:] }
 

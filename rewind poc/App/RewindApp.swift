@@ -3,12 +3,20 @@ import SwiftUI
 @main
 struct RewindApp: App {
     @State private var model = AppModel.live()
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
         WindowGroup {
             ContentView(model: model)
                 .preferredColorScheme(model.settings.appearance.colorScheme)
                 .task { await model.start() }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            switch phase {
+            case .active: model.sceneBecameActive()
+            case .background: model.sceneEnteredBackground()
+            default: break
+            }
         }
     }
 }
