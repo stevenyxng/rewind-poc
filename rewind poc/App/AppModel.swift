@@ -57,7 +57,10 @@ final class AppModel {
         let model = AppModel(settings: AppSettings(), haptics: HapticsEngine(), player: PlaybackEngine(),
                              library: LocalLibrary(), cloud: cloud)
         if firebase {
-            model.logEvent = HapticExperiment.log
+            model.logEvent = { [unowned model] name, parameters in
+                HapticExperiment.log(name, parameters)
+                HapticExperiment.upload(parameters, tuning: model.haptics.tuning)
+            }
             model.applyExperiment = { [unowned model] in await HapticExperiment.apply(to: model.haptics) }
         }
         return model
