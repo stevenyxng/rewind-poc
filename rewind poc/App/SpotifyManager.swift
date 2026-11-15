@@ -42,6 +42,7 @@ final class SpotifyManager: NSObject, @preconcurrency SPTAppRemoteDelegate, @pre
             return false
         }
         accountGeneration = UUID()
+        endManagedPlayback()
         shouldReconnect = false
         isLinked = false
         isAuthorizingLibrary = false
@@ -227,10 +228,77 @@ final class SpotifyManager: NSObject, @preconcurrency SPTAppRemoteDelegate, @pre
                 return false
             }
         }
+        endManagedPlayback()
         shouldReconnect = false
         appRemote.disconnect()
         clearConnection()
         return true
+    }
+
+    @ObservationIgnored var onManagedTrackEnded: (() -> Void)?
+    @ObservationIgnored var onManagedPlaybackReplaced: (() -> Void)?
+    @ObservationIgnored private var managedURI: String?
+    @ObservationIgnored private var managedTrackStarted = false
+
+    func endManagedPlayback() {
+        managedURI = nil
+        managedTrackStarted = false
+    }
+
+    func pauseForListEnd() async {
+        endManagedPlayback()
+        guard let api = appRemote.playerAPI, isConnected else { return }
+        let error: Error? = await withCheckedContinuation { continuation in
+            api.pause { _, error in continuation.resume(returning: error) }
+        }
+        if error != nil { report("Spotify couldn’t stop playback. Please pause it in Spotify.") }
+        refreshPlayerState()
+    }
+
+    func playListTrack(uri: String, alreadyPlaying: Bool = false) async -> Bool {
+        endManagedPlayback()
+        if !isConnected || !appRemote.isConnected {
+            guard await connect() else { return false }
+            let deadline = ProcessInfo.processInfo.systemUptime + 30
+            while !isConnected && ProcessInfo.processInfo.systemUptime < deadline {
+                do { try await Task.sleep(for: .milliseconds(100)) } catch { return false }
+            }
+        }
+        guard !Task.isCancelled, isConnected else { return false }
+        let started = alreadyPlaying ? true : await play(uri: uri)
+        guard !Task.isCancelled else { return false }
+        guard started else {
+            if await canPlayOnDemand() == false {
+                report("Selecting this song is unavailable as a Spotify Free member.")
+            }
+            guard !Task.isCancelled else { return false }
+            await pauseForListEnd()
+            return false
+        }
+        guard !Task.isCancelled else { return false }
+        // Rewind owns repeat and advancement for this list; Spotify must not repeat independently.
+        guard let api = appRemote.playerAPI, let state = await fetchState(), !Task.isCancelled else { return false }
+        if state.playbackOptions.repeatMode != .off {
+            let error: Error? = await withCheckedContinuation { continuation in
+                api.setRepeatMode(.off) { _, error in continuation.resume(returning: error) }
+            }
+            guard error == nil else {
+                report("Spotify couldn’t hand repeat control to Rewind. Please turn repeat off in Spotify.")
+                await pauseForListEnd()
+                return false
+            }
+        }
+        guard !Task.isCancelled else { return false }
+        managedURI = uri
+        managedTrackStarted = false
+        refreshPlayerState()
+        return true
+    }
+
+    private func completeManagedTrack() {
+        guard managedURI != nil, managedTrackStarted else { return }
+        endManagedPlayback()
+        onManagedTrackEnded?()
     }
 
     private(set) var isShuffling = false
@@ -270,7 +338,7 @@ final class SpotifyManager: NSObject, @preconcurrency SPTAppRemoteDelegate, @pre
         }
     }
 
-    private func canPlayOnDemand() async -> Bool? {
+    func canPlayOnDemand() async -> Bool? {
         guard let api = appRemote.userAPI else { return nil }
         return await withCheckedContinuation { continuation in
             api.fetchCapabilities(callback: { result, error in
@@ -319,6 +387,19 @@ final class SpotifyManager: NSObject, @preconcurrency SPTAppRemoteDelegate, @pre
         case .togglePlayPause:
             return "Spotify couldn’t change playback right now."
         }
+    }
+
+    /// List navigation must still honor Spotify's skip restrictions.
+    func permitsListNavigation(_ command: Command) async -> Bool {
+        guard isConnected, let state = await fetchState(), !Task.isCancelled else {
+            if !Task.isCancelled { report("Couldn’t check Spotify playback controls. Please try again.") }
+            return false
+        }
+        if isAllowed(command, state: state) { return true }
+        let free = await canPlayOnDemand() == false
+        guard !Task.isCancelled else { return false }
+        report(restrictionMessage(command, free: free, state: state))
+        return false
     }
 
     @discardableResult
@@ -573,6 +654,24 @@ final class SpotifyManager: NSObject, @preconcurrency SPTAppRemoteDelegate, @pre
     func playerStateDidChange(_ playerState: SPTAppRemotePlayerState) {
         guard isConnected else { return }
         let track = playerState.track
+        if let managedURI {
+            if track.uri == managedURI {
+                if managedTrackStarted && fastSeekTask == nil && currentTime >= duration - 1 && duration > 0
+                    && playerState.playbackPosition < 500 {
+                    completeManagedTrack()
+                } else {
+                    managedTrackStarted = true
+                }
+            } else if managedTrackStarted {
+                if duration > 0 && currentTime >= duration - 2 {
+                    completeManagedTrack()
+                } else {
+                    // Playback was changed outside Rewind; do not fight the user's selection.
+                    endManagedPlayback()
+                    onManagedPlaybackReplaced?()
+                }
+            }
+        }
         let changed = trackURI != track.uri
         trackURI = track.uri
         title = track.name
@@ -598,6 +697,7 @@ final class SpotifyManager: NSObject, @preconcurrency SPTAppRemoteDelegate, @pre
                     do { try await Task.sleep(for: .milliseconds(250)) } catch { return }
                     guard let self, isConnected, !isPaused else { return }
                     currentTime = min(duration, position + (ProcessInfo.processInfo.systemUptime - started) * speed)
+                    if duration > 0, currentTime >= duration { completeManagedTrack() }
                 }
             }
         }

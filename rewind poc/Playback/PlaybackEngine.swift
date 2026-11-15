@@ -21,6 +21,8 @@ final class PlaybackEngine {
     var hasTrack: Bool { queue.current != nil }
 
     /// Turns a track into a URL AVPlayer can open (local file, cache, or stream).
+    @ObservationIgnored var onTrackEnded: (() -> Void)?
+
     @ObservationIgnored var urlResolver: ((Track) async throws -> URL)?
 
     /// Restart the current track instead of going back if we're past this point.
@@ -214,6 +216,11 @@ final class PlaybackEngine {
     }
 
     private func itemDidEnd() {
+        if let onTrackEnded {
+            pause()
+            onTrackEnded()
+            return
+        }
         let before = queue.current?.id
         guard let next = queue.advance(userInitiated: false) else {
             // End of queue with repeat off: stop at the top of the last track.

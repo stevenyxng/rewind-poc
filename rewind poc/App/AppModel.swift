@@ -17,6 +17,7 @@ final class AppModel {
     /// Transient status line ("Imported 3 songs").
     private(set) var message: String?
     private(set) var isPreparingShuffle = false
+    private(set) var listeningQueue: ListeningQueue?
     @ObservationIgnored private var selectionTask: Task<Void, Never>?
     var showingImporter = false
 
@@ -43,6 +44,8 @@ final class AppModel {
             MenuBuilder.items(for: screen, context: menuContext)
         }
         player.urlResolver = { [unowned self] track in try await playableURL(for: track) }
+        spotifyManager.onManagedTrackEnded = { [weak self] in self?.advanceListeningQueue() }
+        spotifyManager.onManagedPlaybackReplaced = { [weak self] in self?.clearListeningQueue() }
         spotifyManager.onError = { [weak self] message in self?.show(message) }
         spotifyManager.library.onChange = { [weak self] in self?.navigator.clampCurrent() }
         tutorial.onFinish = { [unowned self] in
@@ -106,8 +109,8 @@ final class AppModel {
                     hasNowPlaying: hasNowPlaying,
                     clickSound: settings.clickSound,
                     haptics: settings.haptics,
-                    shuffle: spotifyManager.isConnected ? spotifyManager.isShuffling : settings.shuffle,
-                    repeatMode: spotifyManager.isConnected ? spotifyManager.repeatMode : settings.repeatMode,
+                    shuffle: listeningQueue != nil ? settings.shuffle : (spotifyManager.isConnected ? spotifyManager.isShuffling : settings.shuffle),
+                    repeatMode: listeningQueue != nil ? settings.repeatMode : (spotifyManager.isConnected ? spotifyManager.repeatMode : settings.repeatMode),
                     appearance: settings.appearance,
                     version: Self.version)
     }
@@ -207,9 +210,21 @@ final class AppModel {
             if spotifyManager.isConnected { spotifyManager.perform(.togglePlayPause) }
             else { player.togglePlayPause() }
         case .next:
+            if listeningQueue != nil { advanceListeningQueue(manual: true); return }
             if spotifyManager.isConnected { spotifyManager.perform(.next) }
             else { player.nextTrack() }
         case .previous:
+            if listeningQueue != nil {
+                selectionTask?.cancel()
+                selectionTask = Task {
+                    if case .spotify = listeningQueue?.current {
+                        guard await spotifyManager.permitsListNavigation(.previous), !Task.isCancelled else { return }
+                    }
+                    _ = listeningQueue?.previous()
+                    await playListeningTrack()
+                }
+                return
+            }
             if spotifyManager.isConnected { spotifyManager.perform(.previous) }
             else { player.previousTrack() }
         }
@@ -236,13 +251,8 @@ final class AppModel {
             if case .spotifyPlaylist(let id) = screen {
                 Task { await spotifyManager.library.loadPlaylist(id: id) }
             }
-        case .play(let tracks, let index):
-            selectionTask?.cancel()
-            selectionTask = Task {
-                guard await spotifyManager.yieldToLocalPlayback(), !Task.isCancelled else { return }
-                player.play(tracks, startAt: index, shuffled: settings.shuffle, repeatMode: settings.repeatMode)
-                openNowPlaying()
-            }
+        case .play:
+            selectListeningList(action)
         case .shuffleAll:
             guard !isPreparingShuffle else { return }
             selectionTask?.cancel()
@@ -257,18 +267,15 @@ final class AppModel {
             navigator.back()
         case .refreshCloud:
             Task { await cloud.refresh() }
-        case .playSpotify(let uri):
-            selectionTask?.cancel()
-            selectionTask = Task {
-                player.stop()
-                if await spotifyManager.play(uri: uri), !Task.isCancelled { openNowPlaying() }
-            }
+        case .playSpotify:
+            selectListeningList(action)
         case .refreshSpotifyPlaylist(let id):
             Task { await spotifyManager.library.loadPlaylist(id: id) }
         case .refreshSpotify:
             Task { await spotifyManager.library.refresh() }
         case .disconnectSpotify:
             selectionTask?.cancel()
+            clearListeningQueue()
             if spotifyManager.disconnect() {
                 navigator.removeScreens {
                     switch $0 {
@@ -298,62 +305,48 @@ final class AppModel {
         do {
             let spotify = try await spotifyManager.library.songsForShuffle()
             try Task.checkCancellation()
-            let local = menuContext.allTracks
-            let pool = ShufflePool.songs(local: local, spotify: spotify.songs)
-            var rng = SystemRandomNumberGenerator()
-            guard let selected = ShufflePool.pick(from: pool, using: &rng) else {
+            let pool = ShufflePool.songs(local: menuContext.allTracks, spotify: spotify.songs)
+            guard let index = pool.indices.randomElement() else {
                 show("No playable songs. Add music or connect Spotify.")
                 return
             }
-            switch selected {
-            case .local(let track):
-                guard let index = local.firstIndex(where: { $0.id == track.id }),
-                      await spotifyManager.yieldToLocalPlayback(), !Task.isCancelled else { return }
-                player.play(local, startAt: index, shuffled: true, repeatMode: settings.repeatMode)
-                openNowPlaying()
-            case .spotify(let song):
+            settings.shuffle = true
+            listeningQueue = ListeningQueue(songs: pool, index: index)
+            var spotifyStarted = false
+            if case .spotify(let song) = pool[index] {
                 player.stop()
                 let result = await spotifyManager.playShuffleSelection(uri: song.uri)
                 guard !Task.isCancelled else { return }
-                switch result {
-                case .playing:
-                    openNowPlaying()
-                case .onDemandRestricted:
+                if case .onDemandRestricted = result {
                     let restriction = "You have run out of on-demand track selection as a Spotify Free member"
-                    // Fallback uses imported local files, not another Spotify request or cloud stream.
-                    let fallback = library.tracks.filter {
-                        if case .local = $0.source { return true }
-                        return false
-                    }
-                    guard let track = fallback.randomElement(),
-                          let index = fallback.firstIndex(where: { $0.id == track.id }) else {
+                    let local = library.tracks.map(ShuffleSong.local)
+                    guard let fallback = local.indices.randomElement() else {
+                        clearListeningQueue()
                         show(restriction + "\nNo local songs are available. Add local music to continue.", duration: 8)
                         return
                     }
-                    guard await spotifyManager.yieldToLocalPlayback(), !Task.isCancelled else { return }
-                    player.play(fallback, startAt: index, shuffled: true, repeatMode: settings.repeatMode)
+                    listeningQueue = ListeningQueue(songs: local, index: fallback)
+                    await playListeningTrack()
                     openNowPlaying()
                     show(restriction, duration: 6)
-                    return // Keep the explanation visible after starting local playback.
-                case .failed:
                     return
                 }
+                if case .failed = result { clearListeningQueue(); return }
+                spotifyStarted = true
             }
+            await playListeningTrack(spotifyAlreadyPlaying: spotifyStarted)
+            guard !Task.isCancelled else { return }
+            openNowPlaying()
             if spotify.skippedPlaylists > 0 {
                 show("Shuffled available songs; Spotify denied access to \(spotify.skippedPlaylists) playlists.")
             } else {
                 message = nil
             }
         } catch is CancellationError {
-            // A newer song selection supersedes this request.
         } catch SpotifyAuthError.busy {
             show("Spotify library is still loading. Try Shuffle Songs again shortly.")
-        } catch let error as SpotifyAuthError {
-            show(error.localizedDescription)
-        } catch let error as SpotifyLibraryError {
-            show(error.localizedDescription)
         } catch {
-            show("Couldn't prepare shuffle. Check your connection and try again.")
+            show(error.localizedDescription)
         }
     }
 
@@ -368,6 +361,7 @@ final class AppModel {
             settings.haptics.toggle()
             haptics.isEnabled = settings.haptics
         case .shuffle:
+            if listeningQueue != nil { settings.shuffle.toggle(); return }
             if spotifyManager.isConnected {
                 spotifyManager.perform(.shuffle)
             } else {
@@ -375,6 +369,7 @@ final class AppModel {
                 player.setShuffle(settings.shuffle)
             }
         case .repeatMode:
+            if listeningQueue != nil { settings.repeatMode = settings.repeatMode.next; return }
             if spotifyManager.isConnected {
                 spotifyManager.perform(.repeatMode)
             } else {
@@ -426,6 +421,91 @@ final class AppModel {
             }
         case .failure(let error):
             show("Import failed: \(error.localizedDescription)")
+        }
+    }
+
+    private func clearListeningQueue() {
+        listeningQueue = nil
+        player.onTrackEnded = nil
+        spotifyManager.endManagedPlayback()
+    }
+
+    private func selectListeningList(_ action: MenuAction) {
+        let screen = navigator.screen
+        let row = navigator.current.selected
+        player.onTrackEnded = nil
+        selectionTask?.cancel()
+        spotifyManager.endManagedPlayback()
+        selectionTask = Task {
+            if case .spotifyPlaylist(let id) = screen,
+               spotifyManager.library.playlistContents[id]?.state != .ready {
+                await spotifyManager.library.loadPlaylist(id: id)
+            }
+            guard !Task.isCancelled else { return }
+            let rows = MenuBuilder.playbackRows(for: screen, context: menuContext)
+            var songs = rows.map(\.song)
+            var index = rows.firstIndex(where: { $0.row == row }) ?? 0
+            if songs.isEmpty, case .play(let tracks, let selected) = action {
+                songs = tracks.map(ShuffleSong.local)
+                index = selected
+            }
+            guard songs.indices.contains(index) else {
+                show("No playable songs in this list.")
+                return
+            }
+            listeningQueue = ListeningQueue(songs: songs, index: index)
+            await playListeningTrack()
+            if !Task.isCancelled { openNowPlaying() }
+        }
+    }
+
+    private func playListeningTrack(spotifyAlreadyPlaying: Bool = false) async {
+        guard !Task.isCancelled, let song = listeningQueue?.current else { return }
+        spotifyManager.endManagedPlayback()
+        switch song {
+        case .local(let track):
+            guard await spotifyManager.yieldToLocalPlayback(), !Task.isCancelled else { return }
+            player.stop()
+            player.onTrackEnded = { [weak self] in self?.advanceListeningQueue() }
+            player.play([track], startAt: 0, shuffled: false, repeatMode: .off)
+        case .spotify(let track):
+            player.onTrackEnded = nil
+            player.stop()
+            guard await spotifyManager.playListTrack(uri: track.uri, alreadyPlaying: spotifyAlreadyPlaying), !Task.isCancelled else {
+                if !Task.isCancelled { clearListeningQueue() }
+                return
+            }
+        }
+    }
+
+    private func advanceListeningQueue(manual: Bool = false) {
+        guard listeningQueue != nil else { return }
+        selectionTask?.cancel()
+        selectionTask = Task {
+            if manual, case .spotify = listeningQueue?.current {
+                guard await spotifyManager.permitsListNavigation(.next), !Task.isCancelled else { return }
+            }
+            var repeatAllowed = true
+            if !manual, settings.repeatMode == .one,
+               case .spotify = listeningQueue?.current {
+                let capability = await spotifyManager.canPlayOnDemand()
+                guard !Task.isCancelled else { return }
+                repeatAllowed = capability == true
+                if capability == false {
+                    show("Repeating this song is unavailable. This action requires a Spotify Premium account.", duration: 6)
+                } else if capability == nil {
+                    show("Couldn’t check Spotify playback controls. Please try again.", duration: 6)
+                }
+            }
+            var rng = SystemRandomNumberGenerator()
+            let next = listeningQueue?.advance(shuffle: settings.shuffle, repeatMode: settings.repeatMode,
+                                              repeatAllowed: repeatAllowed, manual: manual, using: &rng)
+            if next == nil {
+                player.pause()
+                await spotifyManager.pauseForListEnd()
+                return
+            }
+            await playListeningTrack()
         }
     }
 

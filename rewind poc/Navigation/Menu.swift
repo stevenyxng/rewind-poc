@@ -250,6 +250,22 @@ nonisolated enum MenuBuilder {
         }
     }
 
+    /// Resolve playable rows in their displayed order, including duplicate playlist entries.
+    static func playbackRows(for screen: Screen, context: MenuContext) -> [(row: Int, song: ShuffleSong)] {
+        let spotify = context.spotify.songs + context.spotifyPlaylistContents.values.flatMap(\.songs)
+        return items(for: screen, context: context).enumerated().compactMap { row, item in
+            switch item.action {
+            case .play(let tracks, let index):
+                guard tracks.indices.contains(index) else { return nil }
+                return (row, .local(tracks[index]))
+            case .playSpotify(let uri):
+                guard let song = spotify.first(where: { $0.uri == uri && $0.canPlay }) else { return nil }
+                return (row, .spotify(song))
+            default: return nil
+            }
+        }
+    }
+
     private static func spotifySongRows(_ songs: [SpotifyLibrarySong]) -> [MenuItem] {
         songs.map {
             MenuItem(id: $0.uri, title: $0.name, detail: $0.canPlay ? "Spotify" : "Unavailable",
