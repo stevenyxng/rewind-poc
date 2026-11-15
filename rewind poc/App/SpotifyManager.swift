@@ -31,14 +31,49 @@ final class SpotifyManager: NSObject, @preconcurrency SPTAppRemoteDelegate, @pre
         token: { [webAuth] force in try await webAuth.validAccessToken(forceRefresh: force) }
     ))
     private(set) var isAuthorizingLibrary = false
+    private(set) var isLinked = (try? SpotifyCredentialStore(account: "d291d1a854c84ae3b623ae387e116875").load()) != nil
+    @ObservationIgnored private var accountGeneration = UUID()
+
+    @discardableResult
+    func disconnect() -> Bool {
+        do { try webAuth.disconnect() }
+        catch {
+            report("Couldn't remove Spotify sign-in. Please try disconnecting again.")
+            return false
+        }
+        accountGeneration = UUID()
+        shouldReconnect = false
+        isLinked = false
+        isAuthorizingLibrary = false
+        accessToken = nil
+        appRemote.connectionParameters.accessToken = nil
+        appRemote.disconnect()
+        clearConnection()
+        library.disconnect()
+        trackURI = nil
+        title = ""
+        artist = ""
+        album = ""
+        artwork = nil
+        duration = 0
+        currentTime = 0
+        isPaused = true
+        isShuffling = false
+        repeatMode = .off
+        errorMessage = nil
+        return true
+    }
 
     func connectLibraryAndPlayback() async {
         guard !isAuthorizingLibrary else { return }
         isAuthorizingLibrary = true
-        defer { isAuthorizingLibrary = false }
+        let generation = accountGeneration
+        defer { if generation == accountGeneration { isAuthorizingLibrary = false } }
         errorMessage = nil
         do {
             try await webAuth.authorizeIfNeeded()
+            guard generation == accountGeneration else { return }
+            isLinked = true
             Task { await library.refresh() }
             if !(await connect()) {
                 report("Library access authorized. Install Spotify on this device to connect playback.")
@@ -46,8 +81,10 @@ final class SpotifyManager: NSObject, @preconcurrency SPTAppRemoteDelegate, @pre
         } catch SpotifyAuthError.cancelled {
             // Dismissing the system sheet is a normal user action.
         } catch let error as SpotifyAuthError {
+            guard generation == accountGeneration else { return }
             report(error.localizedDescription)
         } catch {
+            guard generation == accountGeneration else { return }
             report("Couldn't connect to Spotify. Check your connection and try again.")
         }
     }
@@ -438,6 +475,7 @@ final class SpotifyManager: NSObject, @preconcurrency SPTAppRemoteDelegate, @pre
     }
 
     func handleCallback(_ url: URL) {
+        guard shouldReconnect else { return }
         // Web authorization callbacks belong exclusively to ASWebAuthenticationSession.
         // Never interpret a code/state callback as an App Remote access-token response.
         let queryNames = Set(URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.map(\.name) ?? [])
@@ -484,12 +522,13 @@ final class SpotifyManager: NSObject, @preconcurrency SPTAppRemoteDelegate, @pre
     // Spotify documents that its delegate and API callbacks run on the main thread.
     func appRemoteDidEstablishConnection(_ appRemote: SPTAppRemote) {
         isConnecting = false
-        guard isAppActive else {
+        guard isAppActive, shouldReconnect else {
             appRemote.disconnect()
             clearConnection()
             return
         }
         isConnected = true
+        isLinked = true
         errorMessage = nil
         Self.logger.notice("Spotify connected; subscribing to player state")
         guard let api = appRemote.playerAPI else { return }
@@ -519,7 +558,7 @@ final class SpotifyManager: NSObject, @preconcurrency SPTAppRemoteDelegate, @pre
 
     func appRemote(_ appRemote: SPTAppRemote, didDisconnectWithError error: Error?) {
         clearConnection()
-        if let error, isAppActive {
+        if let error, isAppActive, shouldReconnect {
             report("Spotify disconnected (code \((error as NSError).code)). Try connecting again.")
         }
         Self.logger.notice("Spotify disconnected")
@@ -527,6 +566,7 @@ final class SpotifyManager: NSObject, @preconcurrency SPTAppRemoteDelegate, @pre
 
     func appRemote(_ appRemote: SPTAppRemote, didFailConnectionAttemptWithError error: Error?) {
         clearConnection()
+        guard shouldReconnect else { return }
         report("Spotify connection failed (code \((error as NSError?)?.code ?? 0)). Try connecting again.")
     }
 

@@ -254,6 +254,15 @@ final class SpotifyLibrary {
     @ObservationIgnored private let api: SpotifyLibraryAPI
 
     init(api: SpotifyLibraryAPI) { self.api = api }
+    @ObservationIgnored private var generation = UUID()
+
+    func disconnect() {
+        generation = UUID()
+        snapshot = SpotifyLibrarySnapshot()
+        playlistContents = [:]
+        state = .disconnected
+        onChange?()
+    }
 
     /// Loads playlist tracks even if their song lists have never been opened.
     /// A playlist denied by Spotify is excluded; network/auth failures abort rather than bias the pool.
@@ -261,23 +270,27 @@ final class SpotifyLibrary {
         guard state != .loading else { throw SpotifyAuthError.busy }
         if state == .disconnected { return ([], 0) }
         if case .failed = state { throw SpotifyLibraryError.invalidResponse }
+        let generation = generation
         var songs = snapshot.songs
         var skipped = 0
         for playlist in snapshot.playlists {
             try Task.checkCancellation()
             do {
                 let tracks = try await api.fetchPlaylistSongs(id: playlist.id)
+                guard generation == self.generation else { throw CancellationError() }
                 playlistContents[playlist.id] = SpotifyPlaylistContents(songs: tracks, state: .ready)
                 songs += tracks
             } catch SpotifyLibraryError.forbidden {
                 skipped += 1
             }
         }
+        guard generation == self.generation else { throw CancellationError() }
         onChange?()
         return (songs, skipped)
     }
 
     func loadPlaylist(id: String) async {
+        let generation = generation
         guard playlistContents[id]?.state != .loading else { return }
         var contents = playlistContents[id] ?? SpotifyPlaylistContents()
         contents.state = .loading
@@ -293,31 +306,39 @@ final class SpotifyLibrary {
         } catch {
             contents.state = .failed("Couldn't load playlist. Please try again.")
         }
+        guard generation == self.generation else { return }
         playlistContents[id] = contents
     }
 
     func refresh() async {
+        let generation = generation
         guard state != .loading else { return }
         state = .loading
         defer { onChange?() }
         do {
             let updated = try await api.fetchLibrary()
             try Task.checkCancellation()
+            guard generation == self.generation else { return }
             snapshot = updated
             state = .ready
         } catch SpotifyAuthError.signInRequired {
+            guard generation == self.generation else { return }
             playlistContents = [:]
             snapshot = SpotifyLibrarySnapshot()
             state = .disconnected
         } catch SpotifyAuthError.missingPermissions {
+            guard generation == self.generation else { return }
             playlistContents = [:]
             snapshot = SpotifyLibrarySnapshot()
             state = .disconnected
         } catch is CancellationError {
+            guard generation == self.generation else { return }
             state = .failed("Spotify library refresh was cancelled.")
         } catch let error as SpotifyLibraryError {
+            guard generation == self.generation else { return }
             state = .failed(error.localizedDescription)
         } catch {
+            guard generation == self.generation else { return }
             state = .failed("Couldn't load Spotify. Check your connection and try again.")
         }
     }

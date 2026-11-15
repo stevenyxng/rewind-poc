@@ -101,6 +101,7 @@ final class AppModel {
                     cloudState: cloud.state,
                     spotify: spotifyManager.library.snapshot,
                     spotifyState: spotifyManager.library.state,
+                    spotifyLinked: spotifyManager.isLinked,
                     spotifyPlaylistContents: spotifyManager.library.playlistContents,
                     hasNowPlaying: hasNowPlaying,
                     clickSound: settings.clickSound,
@@ -266,6 +267,19 @@ final class AppModel {
             Task { await spotifyManager.library.loadPlaylist(id: id) }
         case .refreshSpotify:
             Task { await spotifyManager.library.refresh() }
+        case .disconnectSpotify:
+            selectionTask?.cancel()
+            if spotifyManager.disconnect() {
+                navigator.removeScreens {
+                    switch $0 {
+                    case .spotifyArtist, .spotifyAlbum, .spotifyPlaylist: return true
+                    case .nowPlaying: return !player.hasTrack
+                    default: return false
+                    }
+                }
+                navigator.clampCurrent()
+                show("Disconnected from Spotify")
+            }
         case .connectSpotify:
             Task {
                 await spotifyManager.connectLibraryAndPlayback()

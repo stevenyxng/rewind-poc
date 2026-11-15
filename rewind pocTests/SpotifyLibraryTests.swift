@@ -118,6 +118,61 @@ struct SpotifyLibraryTests {
         #expect(MenuBuilder.items(for: .spotifyArtist("albumArtist"), context: context).count == 2)
     }
 
+    @Test func disconnectClearsLibraryAndIgnoresInFlightRefresh() async throws {
+        var suspend = false
+        var pending: CheckedContinuation<Void, Never>?
+        let api = SpotifyLibraryAPI(token: { _ in "test" }, transport: { request in
+            if suspend {
+                await withCheckedContinuation { pending = $0 }
+                throw URLError(.notConnectedToInternet)
+            }
+            switch request.url?.path {
+            case "/v1/me/tracks":
+                return try response(request, "{\"items\":[{\"track\":\(Self.song)}],\"next\":null}")
+            case "/v1/me/playlists":
+                return try response(request, "{\"items\":[\(Self.playlist)],\"next\":null}")
+            case "/v1/playlists/p1/items":
+                return try response(request, "{\"items\":[{\"item\":\(Self.song)}],\"next\":null}")
+            default:
+                return try response(request, #"{"items":[],"next":null}"#)
+            }
+        })
+        let library = SpotifyLibrary(api: api)
+        await library.refresh()
+        await library.loadPlaylist(id: "p1")
+        #expect(!library.snapshot.songs.isEmpty)
+        #expect(!library.playlistContents.isEmpty)
+        suspend = true
+        let refresh = Task { await library.refresh() }
+        while pending == nil { await Task.yield() }
+        library.disconnect()
+        pending?.resume()
+        await refresh.value
+        #expect(library.state == .disconnected)
+        #expect(library.snapshot.songs.isEmpty)
+        #expect(library.snapshot.albums.isEmpty)
+        #expect(library.snapshot.artists.isEmpty)
+        #expect(library.snapshot.playlists.isEmpty)
+        #expect(library.playlistContents.isEmpty)
+    }
+
+    @Test func settingsSwitchesBetweenConnectAndDisconnect() {
+        var context = MenuContext()
+        var rows = MenuBuilder.items(for: .settings, context: context)
+        #expect(rows.contains { $0.title == "Connect to Spotify" && $0.action == .connectSpotify })
+        #expect(!rows.contains { $0.action == .refreshSpotify })
+        context.spotifyLinked = true
+        rows = MenuBuilder.items(for: .settings, context: context)
+        #expect(rows.contains { $0.title == "Disconnect from Spotify" && $0.action == .disconnectSpotify })
+        #expect(rows.contains { $0.action == .refreshSpotify })
+        context.spotifyLinked = false
+        context.localTracks = [MenuNavigationTests.track("Local")]
+        for screen: Screen in [.songs, .artists, .albums, .playlists, .settings] {
+            #expect(!MenuBuilder.items(for: screen, context: context).contains { $0.action == .refreshSpotify })
+        }
+        #expect(MenuBuilder.items(for: .songs, context: context).contains { $0.title == "Local" })
+    }
+
     @Test func refreshesTokenOnceAfterUnauthorized() async throws {
         var requests = 0
         var forcedRefreshes = 0

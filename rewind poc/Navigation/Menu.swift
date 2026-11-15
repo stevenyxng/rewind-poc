@@ -34,6 +34,7 @@ nonisolated enum MenuAction: Equatable, Sendable {
     case refreshCloud
     case startTutorial
     case connectSpotify
+    case disconnectSpotify
     case refreshSpotify
     case refreshSpotifyPlaylist(String)
     case playSpotify(String)
@@ -58,6 +59,7 @@ nonisolated struct MenuContext: Sendable {
     var cloudState: CloudState = .notConfigured
     var spotify = SpotifyLibrarySnapshot()
     var spotifyState = SpotifyLibraryState.disconnected
+    var spotifyLinked = false
     var spotifyPlaylistContents: [String: SpotifyPlaylistContents] = [:]
     var hasNowPlaying = false
     var clickSound = true
@@ -224,11 +226,11 @@ nonisolated enum MenuBuilder {
                 MenuItem(id: "shuffle", title: "Shuffle", detail: onOff(c.shuffle), action: .toggle(.shuffle)),
                 MenuItem(id: "repeat", title: "Repeat", detail: c.repeatMode.label, action: .toggle(.repeatMode)),
                 MenuItem(id: "import", title: "Import Files", action: .importFiles),
-                MenuItem(id: "spotify", title: "Connect to Spotify", action: .connectSpotify),
-                MenuItem(id: "spotifyRefresh", title: "Refresh Spotify Library", action: .refreshSpotify),
+                MenuItem(id: "spotify", title: c.spotifyLinked ? "Disconnect from Spotify" : "Connect to Spotify",
+                         action: c.spotifyLinked ? .disconnectSpotify : .connectSpotify),
                 MenuItem(id: "tutorial", title: "Tutorial", action: .startTutorial),
                 MenuItem(id: "about", title: "About", action: .push(.about)),
-            ]
+            ] + (c.spotifyLinked ? [MenuItem(id: "spotifyRefresh", title: "Refresh Spotify Library", action: .refreshSpotify)] : [])
 
         case .about:
             let cloud: String = switch c.cloudState {

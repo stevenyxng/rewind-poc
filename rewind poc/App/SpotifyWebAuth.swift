@@ -151,6 +151,18 @@ final class SpotifyWebAuth: NSObject, ASWebAuthenticationPresentationContextProv
     private var session: ASWebAuthenticationSession?
     private var anchor: ASPresentationAnchor?
     private var refreshTask: Task<String, Error>?
+    private var generation = UUID()
+
+    func disconnect() throws {
+        try store.delete()
+        generation = UUID()
+        refreshTask?.cancel()
+        refreshTask = nil
+        session?.cancel()
+        session = nil
+        anchor = nil
+        credentials = nil
+    }
 
     init(clientID: String, redirectURL: URL) {
         self.clientID = clientID
@@ -164,6 +176,7 @@ final class SpotifyWebAuth: NSObject, ASWebAuthenticationPresentationContextProv
 
     /// Reuses a valid grant, otherwise asks the user for the required library permissions.
     func authorizeIfNeeded() async throws {
+        let generation = generation
         do {
             _ = try await validAccessToken()
             return
@@ -171,6 +184,7 @@ final class SpotifyWebAuth: NSObject, ASWebAuthenticationPresentationContextProv
             // Only an absent/revoked grant triggers interactive authentication.
         } catch SpotifyAuthError.missingPermissions {
         }
+        guard generation == self.generation else { throw SpotifyAuthError.cancelled }
         guard session == nil else { throw SpotifyAuthError.busy }
         guard let window = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene })
             .filter({ $0.activationState == .foregroundActive })
@@ -178,7 +192,7 @@ final class SpotifyWebAuth: NSObject, ASWebAuthenticationPresentationContextProv
             throw SpotifyAuthError.unavailable
         }
         anchor = window
-        defer { session = nil; anchor = nil }
+        defer { if generation == self.generation { session = nil; anchor = nil } }
         let verifier = try SpotifyPKCE.randomString()
         let state = try SpotifyPKCE.randomString()
         var components = URLComponents()
@@ -209,11 +223,13 @@ final class SpotifyWebAuth: NSObject, ASWebAuthenticationPresentationContextProv
             session.presentationContextProvider = self
             if !session.start() { continuation.resume(throwing: SpotifyAuthError.unavailable) }
         }
+        guard generation == self.generation else { throw SpotifyAuthError.cancelled }
         let code = try SpotifyPKCE.authorizationCode(from: callback, redirectURL: redirectURL, state: state)
         let response = try await requestToken([
             "grant_type": "authorization_code", "code": code,
             "redirect_uri": redirectURL.absoluteString, "code_verifier": verifier
         ])
+        guard generation == self.generation else { throw SpotifyAuthError.cancelled }
         let newCredentials = try response.credentials(previous: nil)
         try store.save(newCredentials)
         credentials = newCredentials
@@ -226,23 +242,26 @@ final class SpotifyWebAuth: NSObject, ASWebAuthenticationPresentationContextProv
         guard let current = credentials else { throw SpotifyAuthError.signInRequired }
         guard current.hasLibraryPermissions else { throw SpotifyAuthError.missingPermissions }
         if !forceRefresh, current.expiresAt.timeIntervalSinceNow > 60 { return current.accessToken }
+        let generation = generation
         let task = Task { @MainActor in
             do {
                 let response = try await self.requestToken([
                     "grant_type": "refresh_token", "refresh_token": current.refreshToken
                 ])
+                guard generation == self.generation, !Task.isCancelled else { throw SpotifyAuthError.cancelled }
                 let updated = try response.credentials(previous: current)
                 try self.store.save(updated)
                 self.credentials = updated
                 return updated.accessToken
             } catch SpotifyAuthError.signInRequired {
+                guard generation == self.generation else { throw SpotifyAuthError.cancelled }
                 self.credentials = nil
                 try self.store.delete()
                 throw SpotifyAuthError.signInRequired
             }
         }
         refreshTask = task
-        defer { refreshTask = nil }
+        defer { if generation == self.generation { refreshTask = nil } }
         return try await task.value
     }
 
