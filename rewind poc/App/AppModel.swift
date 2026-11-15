@@ -21,6 +21,11 @@ final class AppModel {
     static let labDetentCount = 24
     private(set) var labDetent = 0
 
+    /// A/B variant for this launch (Remote Config `variant`). Views switch on it, e.g. `model.variant == "B"`.
+    private(set) var variant = Experiment.defaultVariant
+    /// The UI waits for this so a fresh install never shows one variant and then switches.
+    private(set) var variantReady = false
+
     @ObservationIgnored let clickSound = ClickSound()
     @ObservationIgnored var clock: () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }
     @ObservationIgnored private var scrubSettleTask: Task<Void, Never>?
@@ -30,8 +35,8 @@ final class AppModel {
     @ObservationIgnored private(set) var usage = UsageSession(startedAt: ProcessInfo.processInfo.systemUptime)
     /// Analytics sink; a no-op unless Firebase is configured.
     @ObservationIgnored var logEvent: (String, [String: Any]) -> Void = { _, _ in }
-    /// Applies the Remote Config haptic experiment; a no-op unless Firebase is configured.
-    @ObservationIgnored var applyExperiment: () async -> Void = {}
+    /// Fetches this launch's variant; returns the default unless Firebase is configured.
+    @ObservationIgnored var fetchVariant: () async -> String = { Experiment.defaultVariant }
 
     init(settings: AppSettings, haptics: HapticsEngine, player: PlaybackEngine,
          library: LocalLibrary, cloud: any CloudMusicSource) {
@@ -58,16 +63,21 @@ final class AppModel {
                              library: LocalLibrary(), cloud: cloud)
         if firebase {
             model.logEvent = { [unowned model] name, parameters in
-                HapticExperiment.log(name, parameters)
-                HapticExperiment.upload(parameters, tuning: model.haptics.tuning)
+                Experiment.log(name, parameters)
+                Experiment.upload(parameters, variant: model.variant)
             }
-            model.applyExperiment = { [unowned model] in await HapticExperiment.apply(to: model.haptics) }
+            model.fetchVariant = Experiment.fetchVariant
         }
         return model
     }
 
     func start() async {
-        await applyExperiment()
+        variant = await fetchVariant()
+        #if DEBUG
+        // `-variant B` forces a UI variant locally, without Remote Config.
+        if let forced = UserDefaults.standard.string(forKey: "variant") { variant = forced }
+        #endif
+        variantReady = true
         await library.reconcile()
         navigator.clampCurrent()
         if !settings.tutorialSeen { startTutorial() }

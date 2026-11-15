@@ -7,9 +7,15 @@ struct RewindApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView(model: model)
-                .preferredColorScheme(model.settings.appearance.colorScheme)
-                .task { await model.start() }
+            Group {
+                if model.variantReady {
+                    ContentView(model: model)
+                } else {
+                    Theme.background.ignoresSafeArea()
+                }
+            }
+            .preferredColorScheme(model.settings.appearance.colorScheme)
+            .task { await model.start() }
         }
         .onChange(of: scenePhase) { _, phase in
             switch phase {

@@ -61,4 +61,13 @@ struct AppModelUsageTests {
         model.sceneEnteredBackground()     // nothing happened since: no event
         #expect(logged.count == 1)
     }
+
+    @Test func startAppliesVariantBeforeShowingUI() async throws {
+        let model = try makeModel()
+        model.fetchVariant = { "B" }
+        #expect(!model.variantReady)
+        await model.start()
+        #expect(model.variant == "B")
+        #expect(model.variantReady)
+    }
 }
