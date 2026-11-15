@@ -44,6 +44,12 @@ struct ContentView: View {
         .background(Theme.background.ignoresSafeArea())
         .fileImporter(isPresented: $model.showingImporter, allowedContentTypes: Self.importTypes,
                       allowsMultipleSelection: true) { model.handleImport($0) }
+        .alert("Search Apple Music", isPresented: $model.showingAppleMusicSearch) {
+            TextField("Songs, artists, albums", text: $model.appleMusicSearchText)
+                .autocorrectionDisabled()
+            Button("Search") { model.searchAppleMusic() }
+            Button("Cancel", role: .cancel) {}
+        }
     }
 }
 

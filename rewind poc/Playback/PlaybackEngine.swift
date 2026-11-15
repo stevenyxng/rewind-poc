@@ -1,9 +1,11 @@
 import AVFoundation
 import MediaPlayer
+import MusicKit
 import UIKit
 
-/// AVPlayer-based playback, independent of the UI: queue, shuffle/repeat, audio session,
-/// interruptions, lock screen / Control Center.
+/// Playback, independent of the UI: queue, shuffle/repeat, audio session, interruptions,
+/// lock screen / Control Center. File tracks play through AVPlayer; Apple Music tracks
+/// through MusicKit's `ApplicationMusicPlayer` (in-app, not the Music app's player).
 @Observable
 final class PlaybackEngine {
     private(set) var queue = PlaybackQueue()
@@ -19,6 +21,8 @@ final class PlaybackEngine {
 
     /// Turns a track into a URL AVPlayer can open (local file, cache, or stream).
     @ObservationIgnored var urlResolver: ((Track) async throws -> URL)?
+    /// Supplies MusicKit `Song`s for Apple Music tracks.
+    @ObservationIgnored var appleMusic: AppleMusicService?
 
     /// Restart the current track instead of going back if we're past this point.
     static let restartThreshold: Double = 3
@@ -28,6 +32,14 @@ final class PlaybackEngine {
     @ObservationIgnored private var fastSeekTask: Task<Void, Never>?
     @ObservationIgnored private var timeObserver: Any?
     @ObservationIgnored private var observers: [NSObjectProtocol] = []
+
+    @ObservationIgnored private let musicPlayer = ApplicationMusicPlayer.shared
+    /// True while `musicPlayer` holds our queue (the current track is Apple Music).
+    @ObservationIgnored private var appleMusicActive = false
+    @ObservationIgnored private var appleMusicPoll: Task<Void, Never>?
+    @ObservationIgnored private var lastMusicStatus: MusicKit.MusicPlayer.PlaybackStatus?
+    /// Set while our own load or skip is in flight, so the poll doesn't snap back to the old song.
+    @ObservationIgnored private var appleMusicPending = false
 
     init() {
         configureSession()
@@ -43,9 +55,14 @@ final class PlaybackEngine {
         queue.load(tracks, startAt: index, shuffled: shuffled)
         queue.repeatMode = repeatMode
         guard let track = queue.current else { return }
+        let sameTrack = track.id == previous?.id && errorMessage == nil
+        if track.isAppleMusic {
+            loadAppleMusic(autoplay: true, keepPosition: sameTrack && appleMusicActive)
+            return
+        }
         // Picking the song that's already loaded keeps its position (and resumes if paused);
         // only the queue around it is replaced.
-        if track.id == previous?.id, player.currentItem != nil, errorMessage == nil {
+        if sameTrack, player.currentItem != nil {
             if !isPlaying { play() }
             updateNowPlayingInfo()
             return
@@ -55,6 +72,20 @@ final class PlaybackEngine {
 
     func play() {
         guard hasTrack else { return }
+        if queue.current?.isAppleMusic == true {
+            // Not loaded yet, or the player ran off the end of its queue.
+            guard appleMusicActive, musicPlayer.queue.currentEntry != nil,
+                  musicPlayer.state.playbackStatus != .stopped else {
+                loadAppleMusic(autoplay: true, keepPosition: appleMusicActive && currentTime < duration - 1)
+                return
+            }
+            isPlaying = true
+            errorMessage = nil
+            Task { [weak self] in
+                do { try await self?.musicPlayer.play() } catch { self?.appleMusicFailed(error) }
+            }
+            return
+        }
         if player.currentItem == nil, let track = queue.current {
             load(track, autoplay: true)
             return
@@ -67,7 +98,7 @@ final class PlaybackEngine {
     }
 
     func pause() {
-        player.pause()
+        if appleMusicActive { musicPlayer.pause() } else { player.pause() }
         isPlaying = false
         updateNowPlayingInfo()
     }
@@ -80,7 +111,13 @@ final class PlaybackEngine {
     @discardableResult
     func nextTrack() -> Bool {
         guard let track = queue.advance(userInitiated: true) else { return false }
-        load(track, autoplay: isPlaying)
+        if track.isAppleMusic, appleMusicActive {
+            skipAppleMusic(to: track, forward: true)
+        } else if track.isAppleMusic {
+            loadAppleMusic(autoplay: isPlaying, keepPosition: false)
+        } else {
+            load(track, autoplay: isPlaying)
+        }
         return true
     }
 
@@ -90,7 +127,13 @@ final class PlaybackEngine {
         if currentTime > Self.restartThreshold {
             seek(to: 0)
         } else if let track = queue.retreat(), track.id != before {
-            load(track, autoplay: isPlaying)
+            if track.isAppleMusic, appleMusicActive {
+                skipAppleMusic(to: track, forward: false)
+            } else if track.isAppleMusic {
+                loadAppleMusic(autoplay: isPlaying, keepPosition: false)
+            } else {
+                load(track, autoplay: isPlaying)
+            }
         } else {
             seek(to: 0)
         }
@@ -100,8 +143,12 @@ final class PlaybackEngine {
         let upper = duration > 0 ? duration : seconds
         let target = min(max(seconds, 0), upper)
         currentTime = target
-        player.seek(to: CMTime(seconds: target, preferredTimescale: 600),
-                    toleranceBefore: CMTime(value: 1, timescale: 10), toleranceAfter: CMTime(value: 1, timescale: 10))
+        if appleMusicActive {
+            musicPlayer.playbackTime = target
+        } else {
+            player.seek(to: CMTime(seconds: target, preferredTimescale: 600),
+                        toleranceBefore: CMTime(value: 1, timescale: 10), toleranceAfter: CMTime(value: 1, timescale: 10))
+        }
         updateNowPlayingInfo()
     }
 
@@ -130,15 +177,19 @@ final class PlaybackEngine {
 
     func setShuffle(_ on: Bool) {
         queue.setShuffle(on)
+        // The Apple Music player plays our order, so hand it the new one (same song, same spot).
+        if appleMusicActive { loadAppleMusic(autoplay: isPlaying, keepPosition: true) }
         updateNowPlayingInfo()
     }
 
     func setRepeat(_ mode: RepeatMode) {
         queue.repeatMode = mode
+        if appleMusicActive { musicPlayer.state.repeatMode = Self.musicRepeatMode(mode) }
     }
 
     /// Stops and clears the queue (e.g. the playing track was deleted).
     func stop() {
+        stopAppleMusic()
         player.pause()
         player.replaceCurrentItem(with: nil)
         queue = PlaybackQueue()
@@ -152,6 +203,7 @@ final class PlaybackEngine {
     // MARK: Loading
 
     private func load(_ track: Track, autoplay: Bool) {
+        stopAppleMusic()
         loadToken += 1
         let token = loadToken
         endFastSeek()
@@ -213,12 +265,157 @@ final class PlaybackEngine {
         }
     }
 
+    // MARK: Apple Music
+
+    /// Hands the whole queue (in our play order) to `ApplicationMusicPlayer`, so it moves between
+    /// songs gaplessly and from the lock screen; `syncAppleMusic` mirrors where it is.
+    private func loadAppleMusic(autoplay: Bool, keepPosition: Bool) {
+        guard let current = queue.current, let currentID = current.appleMusicID else { return }
+        loadToken += 1
+        let token = loadToken
+        endFastSeek()
+        let resumeAt = keepPosition ? currentTime : 0
+        let ordered = queue.ordered.filter(\.isAppleMusic)
+        let repeatMode = Self.musicRepeatMode(queue.repeatMode)
+
+        player.pause()
+        player.replaceCurrentItem(with: nil)
+        errorMessage = nil
+        isPlaying = autoplay
+        // ApplicationMusicPlayer publishes its own lock-screen info; drop any left from a file track.
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
+        if !keepPosition { appleMusicMoved(to: current) }
+        appleMusicPending = true
+
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                guard let appleMusic = self.appleMusic else { throw URLError(.unsupportedURL) }
+                let songs = try await appleMusic.songs(for: ordered)
+                guard token == self.loadToken else { return }
+                guard let start = songs.first(where: { $0.id.rawValue == currentID }) else {
+                    throw URLError(.resourceUnavailable)
+                }
+                self.musicPlayer.queue = ApplicationMusicPlayer.Queue(for: songs, startingAt: start)
+                self.musicPlayer.state.repeatMode = repeatMode
+                self.musicPlayer.state.shuffleMode = .off      // shuffle is already in our order
+                try await self.musicPlayer.prepareToPlay()
+                guard token == self.loadToken else {
+                    if self.queue.current?.isAppleMusic != true { self.musicPlayer.stop() }
+                    return
+                }
+                self.appleMusicActive = true
+                self.startAppleMusicPoll()
+                if resumeAt > 0 { self.musicPlayer.playbackTime = resumeAt }
+                if self.isPlaying { try await self.musicPlayer.play() }
+                if token == self.loadToken { self.appleMusicPending = false }
+            } catch {
+                guard token == self.loadToken else { return }
+                self.appleMusicPending = false
+                self.appleMusicFailed(error)
+            }
+        }
+    }
+
+    private func stopAppleMusic() {
+        guard appleMusicActive else { return }
+        appleMusicActive = false
+        appleMusicPoll?.cancel()
+        appleMusicPoll = nil
+        musicPlayer.stop()
+    }
+
+    private func skipAppleMusic(to track: Track, forward: Bool) {
+        appleMusicMoved(to: track)
+        appleMusicPending = true
+        Task { [weak self] in
+            if forward {
+                try? await self?.musicPlayer.skipToNextEntry()
+            } else {
+                try? await self?.musicPlayer.skipToPreviousEntry()
+            }
+            self?.appleMusicPending = false
+        }
+    }
+
+    private func appleMusicFailed(_ error: Error) {
+        isPlaying = false
+        let title = queue.current?.title ?? "song"
+        errorMessage = "Can't play “\(title)”: \(error.localizedDescription)"
+    }
+
+    /// Resets time/duration/artwork for a new Apple Music song.
+    private func appleMusicMoved(to track: Track) {
+        currentTime = 0
+        duration = track.duration
+        artwork = nil
+        guard let url = track.artworkURL else { return }
+        let id = track.id
+        Task { [weak self] in
+            guard let (data, _) = try? await URLSession.shared.data(from: url),
+                  let image = UIImage(data: data),
+                  let self, self.queue.current?.id == id else { return }
+            self.artwork = image
+        }
+    }
+
+    /// `ApplicationMusicPlayer` exposes time, status and current entry as properties, not
+    /// callbacks, so poll them at the same 4 Hz as the AVPlayer time observer.
+    private func startAppleMusicPoll() {
+        appleMusicPoll?.cancel()
+        lastMusicStatus = nil
+        appleMusicPoll = Task { [weak self] in
+            while !Task.isCancelled, let self {
+                self.syncAppleMusic()
+                try? await Task.sleep(for: .milliseconds(250))
+            }
+        }
+    }
+
+    private func syncAppleMusic() {
+        guard appleMusicActive, !appleMusicPending else { return }
+
+        // The player moved on by itself (song ended, lock screen skip): follow it.
+        if let entry = musicPlayer.queue.currentEntry, let current = queue.current,
+           !Self.entry(entry, matches: current),
+           let match = queue.ordered.first(where: { Self.entry(entry, matches: $0) }) {
+            queue.move(to: match.id)
+            appleMusicMoved(to: match)
+        }
+
+        if fastSeekTask == nil { currentTime = musicPlayer.playbackTime }
+
+        // Only react to status *changes*, so our own play/pause isn't undone before it lands.
+        let status = musicPlayer.state.playbackStatus
+        if status != lastMusicStatus {
+            lastMusicStatus = status
+            switch status {
+            case .playing: isPlaying = true
+            case .paused, .stopped, .interrupted: isPlaying = false
+            default: break
+            }
+        }
+    }
+
+    private static func entry(_ entry: ApplicationMusicPlayer.Queue.Entry, matches track: Track) -> Bool {
+        if case .song(let song)? = entry.item, song.id.rawValue == track.appleMusicID { return true }
+        return entry.title == track.title
+    }
+
+    private static func musicRepeatMode(_ mode: RepeatMode) -> MusicKit.MusicPlayer.RepeatMode {
+        switch mode {
+        case .off: .none
+        case .all: .all
+        case .one: .one
+        }
+    }
+
     // MARK: Observers
 
     private func observePlayer() {
         timeObserver = player.addPeriodicTimeObserver(forInterval: CMTime(value: 1, timescale: 4), queue: .main) { [weak self] time in
             MainActor.assumeIsolated {
-                guard let self, self.fastSeekTask == nil, time.isNumeric else { return }
+                guard let self, self.fastSeekTask == nil, !self.appleMusicActive, time.isNumeric else { return }
                 self.currentTime = time.seconds
             }
         }
@@ -256,7 +453,8 @@ final class PlaybackEngine {
             let options = AVAudioSession.InterruptionOptions(
                 rawValue: note.userInfo?[AVAudioSessionInterruptionOptionKey] as? UInt ?? 0)
             MainActor.assumeIsolated {
-                guard let self, let type else { return }
+                // ApplicationMusicPlayer handles its own interruptions; the poll mirrors them.
+                guard let self, let type, !self.appleMusicActive else { return }
                 switch type {
                 case .began:
                     // The system already paused the player; reflect it.
@@ -317,6 +515,8 @@ final class PlaybackEngine {
     }
 
     private func updateNowPlayingInfo() {
+        // ApplicationMusicPlayer owns the lock screen while it plays.
+        guard !appleMusicActive, queue.current?.isAppleMusic != true else { return }
         guard let track = queue.current else {
             MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
             return

@@ -36,6 +36,9 @@ nonisolated struct PlaybackQueue: Equatable, Sendable {
 
     var isEmpty: Bool { order.isEmpty }
 
+    /// Tracks in play order.
+    var ordered: [Track] { order.map { tracks[$0] } }
+
     /// "3 of 12"
     var positionLabel: String { isEmpty ? "" : "\(position + 1) of \(order.count)" }
 
@@ -103,6 +106,15 @@ nonisolated struct PlaybackQueue: Equatable, Sendable {
             position = order.count - 1
         }
         return current
+    }
+
+    /// Jumps to the first track (in play order) matching `id`, e.g. when an external player
+    /// moved on by itself. Returns false, leaving the position alone, if it isn't queued.
+    @discardableResult
+    mutating func move(to id: Track.ID) -> Bool {
+        guard let i = order.firstIndex(where: { tracks[$0].id == id }) else { return false }
+        position = i
+        return true
     }
 
     /// Updates a track in place (e.g. a cloud track learning its duration).

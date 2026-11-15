@@ -11,6 +11,8 @@ nonisolated enum Screen: Hashable, Sendable {
     case localTrack(Track.ID)
     case confirmDelete(Track.ID)
     case cloud
+    case appleMusic, appleMusicSongs, appleMusicArtists, appleMusicAlbums
+    case appleMusicCollection(AppleMusicCollection)
     case settings, hapticsLab, about
     case nowPlaying
 }
@@ -30,6 +32,10 @@ nonisolated enum MenuAction: Equatable, Sendable {
     case back
     case refreshCloud
     case startTutorial
+    case connectAppleMusic
+    case searchAppleMusic
+    case openAppleMusicSettings
+    case openAppleMusicCollection(AppleMusicCollection)
     case none
 }
 
@@ -38,9 +44,16 @@ nonisolated struct MenuItem: Identifiable, Equatable, Sendable {
     let title: String
     var detail: String?
     let action: MenuAction
+    /// Second line under the title (Apple Music rows: artist).
+    var subtitle: String? = nil
+    /// Small cover art at the start of the row (Apple Music rows).
+    var artworkURL: URL? = nil
 
     var showsChevron: Bool {
-        if case .push = action { true } else { false }
+        switch action {
+        case .push, .openAppleMusicCollection: true
+        default: false
+        }
     }
 }
 
@@ -49,6 +62,9 @@ nonisolated struct MenuContext: Sendable {
     var localTracks: [Track] = []
     var cloudTracks: [Track] = []
     var cloudState: CloudState = .notConfigured
+    var appleMusicStatus: AppleMusicStatus = .notDetermined
+    var appleMusicSearch = AppleMusicSearch()
+    var appleMusicCollections: [String: AppleMusicLoad] = [:]
     var hasNowPlaying = false
     var clickSound = true
     var haptics = true
@@ -82,6 +98,7 @@ nonisolated enum MenuBuilder {
                 MenuItem(id: "albums", title: "Albums", action: .push(.albums)),
                 MenuItem(id: "local", title: "Local Files", action: .push(.localFiles)),
                 MenuItem(id: "cloud", title: "Cloud", action: .push(.cloud)),
+                MenuItem(id: "appleMusic", title: "Apple Music", action: .push(.appleMusic)),
             ]
 
         case .songs:
@@ -152,6 +169,30 @@ nonisolated enum MenuBuilder {
                 return songRows(tracks) + [refresh]
             }
 
+        case .appleMusic:
+            return appleMusicRows(c)
+
+        case .appleMusicSongs:
+            return appleMusicSongRows(c.appleMusicSearch.songs)
+
+        case .appleMusicArtists:
+            return c.appleMusicSearch.artists.map(collectionRow)
+
+        case .appleMusicAlbums:
+            return c.appleMusicSearch.albums.map(collectionRow)
+
+        case .appleMusicCollection(let collection):
+            switch c.appleMusicCollections[collection.id] {
+            case .loaded(let tracks)?:
+                guard !tracks.isEmpty else { return [placeholder("No songs")] }
+                return appleMusicSongRows(tracks)
+            case .failed(let message)?:
+                return [placeholder("Couldn't load: \(message)"),
+                        MenuItem(id: "retry", title: "Try Again", action: .openAppleMusicCollection(collection))]
+            case .loading?, nil:
+                return [placeholder("Loading…")]
+            }
+
         case .settings:
             return [
                 MenuItem(id: "appearance", title: "Appearance", detail: c.appearance.label, action: .toggle(.appearance)),
@@ -181,6 +222,70 @@ nonisolated enum MenuBuilder {
         case .hapticsLab, .nowPlaying:
             return []        // custom screens
         }
+    }
+
+    private static func appleMusicRows(_ c: MenuContext) -> [MenuItem] {
+        switch c.appleMusicStatus {
+        case .notDetermined:
+            return [MenuItem(id: "connect", title: "Connect Apple Music", action: .connectAppleMusic)]
+        case .checking:
+            return [placeholder("Connecting…")]
+        case .denied:
+            return [placeholder("Apple Music access is off"),
+                    MenuItem(id: "openSettings", title: "Open Settings", action: .openAppleMusicSettings)]
+        case .restricted:
+            return [placeholder("Apple Music is restricted")]
+        case .noSubscription:
+            return [placeholder("No Apple Music subscription"),
+                    MenuItem(id: "retry", title: "Check Again", action: .connectAppleMusic)]
+        case .failed(let message):
+            return [placeholder("Couldn't connect: \(message)"),
+                    MenuItem(id: "retry", title: "Try Again", action: .connectAppleMusic)]
+        case .ready:
+            let s = c.appleMusicSearch
+            var items = [MenuItem(id: "search", title: "Search…", detail: s.term.isEmpty ? nil : s.term,
+                                  action: .searchAppleMusic)]
+            if s.isLoading {
+                items.append(placeholder("Searching…"))
+            } else if let error = s.error {
+                items.append(placeholder(error))
+            } else if !s.term.isEmpty, s.isEmpty {
+                items.append(placeholder("No results"))
+            } else {
+                if !s.songs.isEmpty {
+                    items.append(MenuItem(id: "songs", title: "Songs", detail: "\(s.songs.count)",
+                                          action: .push(.appleMusicSongs)))
+                }
+                if !s.artists.isEmpty {
+                    items.append(MenuItem(id: "artists", title: "Artists", detail: "\(s.artists.count)",
+                                          action: .push(.appleMusicArtists)))
+                }
+                if !s.albums.isEmpty {
+                    items.append(MenuItem(id: "albums", title: "Albums", detail: "\(s.albums.count)",
+                                          action: .push(.appleMusicAlbums)))
+                }
+            }
+            return items
+        }
+    }
+
+    private static func appleMusicSongRows(_ tracks: [Track]) -> [MenuItem] {
+        tracks.enumerated().map { i, t in
+            MenuItem(id: t.id, title: t.title, detail: duration(t.duration), action: .play(tracks, index: i),
+                     subtitle: t.artist, artworkURL: t.artworkURL)
+        }
+    }
+
+    private static func collectionRow(_ collection: AppleMusicCollection) -> MenuItem {
+        MenuItem(id: collection.id, title: collection.title, action: .openAppleMusicCollection(collection),
+                 subtitle: collection.subtitle, artworkURL: collection.artworkURL)
+    }
+
+    /// "3:07"; nil when unknown.
+    static func duration(_ seconds: Double) -> String? {
+        guard seconds.isFinite, seconds > 0 else { return nil }
+        let s = Int(seconds.rounded())
+        return String(format: "%d:%02d", s / 60, s % 60)
     }
 
     private static func songRows(_ tracks: [Track]) -> [MenuItem] {

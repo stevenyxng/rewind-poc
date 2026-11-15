@@ -7,6 +7,8 @@ nonisolated struct Track: Identifiable, Codable, Hashable, Sendable {
         case local(fileName: String)
         /// Full path in Firebase Storage, e.g. "music/song.mp3".
         case cloud(path: String)
+        /// Apple Music catalog song ID; played with MusicKit's `ApplicationMusicPlayer`.
+        case appleMusic(id: String)
     }
 
     static let unknownArtist = "Unknown Artist"
@@ -19,20 +21,30 @@ nonisolated struct Track: Identifiable, Codable, Hashable, Sendable {
     /// Seconds; 0 if unknown (cloud tracks without metadata learn it when played).
     var duration: Double
     let source: Source
+    /// Remote cover art (Apple Music); file-based tracks read theirs from tags.
+    var artworkURL: URL?
 
-    init(title: String, artist: String? = nil, album: String? = nil, duration: Double = 0, source: Source) {
+    init(title: String, artist: String? = nil, album: String? = nil, duration: Double = 0, source: Source,
+         artworkURL: URL? = nil) {
         switch source {
         case .local(let name): id = "local:" + name
         case .cloud(let path): id = "cloud:" + path
+        case .appleMusic(let catalogID): id = Self.appleMusicTrackID(catalogID)
         }
         self.title = title
         self.artist = artist.nonEmpty ?? Self.unknownArtist
         self.album = album.nonEmpty ?? Self.unknownAlbum
         self.duration = duration
         self.source = source
+        self.artworkURL = artworkURL
     }
 
     var isLocal: Bool { if case .local = source { true } else { false } }
+
+    var appleMusicID: String? { if case .appleMusic(let id) = source { id } else { nil } }
+    var isAppleMusic: Bool { appleMusicID != nil }
+
+    static func appleMusicTrackID(_ catalogID: String) -> String { "apple:" + catalogID }
 
     /// Human title derived from a file name: "02_My_Song.mp3" -> "02 My Song".
     static func title(fromFileName name: String) -> String {

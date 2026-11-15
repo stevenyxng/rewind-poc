@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 
 /// Wires the pieces together: turns wheel events into navigation, playback and haptics.
 @Observable
@@ -8,6 +9,7 @@ final class AppModel {
     let player: PlaybackEngine
     let library: LocalLibrary
     let cloud: any CloudMusicSource
+    let appleMusic: AppleMusicService
     let navigator = MenuNavigator()
     let tutorial = Tutorial()
 
@@ -16,6 +18,9 @@ final class AppModel {
     /// Transient status line ("Imported 3 songs").
     private(set) var message: String?
     var showingImporter = false
+    /// The Apple Music search box (the wheel can't type).
+    var showingAppleMusicSearch = false
+    var appleMusicSearchText = ""
 
     /// Haptics Lab: a strip of test detents to spin through.
     static let labDetentCount = 24
@@ -39,12 +44,13 @@ final class AppModel {
     @ObservationIgnored var fetchVariant: () async -> String = { Experiment.defaultVariant }
 
     init(settings: AppSettings, haptics: HapticsEngine, player: PlaybackEngine,
-         library: LocalLibrary, cloud: any CloudMusicSource) {
+         library: LocalLibrary, cloud: any CloudMusicSource, appleMusic: AppleMusicService = AppleMusicService()) {
         self.settings = settings
         self.haptics = haptics
         self.player = player
         self.library = library
         self.cloud = cloud
+        self.appleMusic = appleMusic
 
         haptics.isEnabled = settings.haptics
         clickSound.isEnabled = settings.clickSound
@@ -52,6 +58,7 @@ final class AppModel {
             MenuBuilder.items(for: screen, context: menuContext)
         }
         player.urlResolver = { [unowned self] track in try await playableURL(for: track) }
+        player.appleMusic = appleMusic
         tutorial.onFinish = { [unowned self] in settings.tutorialSeen = true }
     }
 
@@ -80,6 +87,7 @@ final class AppModel {
         variantReady = true
         await library.reconcile()
         navigator.clampCurrent()
+        appleMusic.start()
         if !settings.tutorialSeen { startTutorial() }
         #if DEBUG
         // `-showTutorial YES` replays the walkthrough on every launch.
@@ -101,6 +109,9 @@ final class AppModel {
         MenuContext(localTracks: library.tracks,
                     cloudTracks: cloud.tracks,
                     cloudState: cloud.state,
+                    appleMusicStatus: appleMusic.status,
+                    appleMusicSearch: appleMusic.results,
+                    appleMusicCollections: appleMusic.collections,
                     hasNowPlaying: player.hasTrack,
                     clickSound: settings.clickSound,
                     haptics: settings.haptics,
@@ -254,9 +265,29 @@ final class AppModel {
             Task { await cloud.refresh() }
         case .startTutorial:
             startTutorial()
+        case .connectAppleMusic:
+            Task {
+                await appleMusic.connect()
+                navigator.clampCurrent()
+            }
+        case .searchAppleMusic:
+            showingAppleMusicSearch = true
+        case .openAppleMusicSettings:
+            if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
+        case .openAppleMusicCollection(let collection):
+            appleMusic.loadCollection(collection)
+            if navigator.screen != .appleMusicCollection(collection) {
+                navigator.push(.appleMusicCollection(collection))
+            }
         case .none:
             break
         }
+    }
+
+    /// Runs the search typed into the search box; results replace the rows under "Search…".
+    func searchAppleMusic() {
+        appleMusic.search(appleMusicSearchText)
+        navigator.clampCurrent()
     }
 
     private func apply(_ toggle: SettingToggle) {
@@ -335,6 +366,8 @@ final class AppModel {
             return url
         case .cloud:
             return try await cloud.playableURL(for: track)
+        case .appleMusic:
+            throw URLError(.unsupportedURL)       // played by ApplicationMusicPlayer, never AVPlayer
         }
     }
 

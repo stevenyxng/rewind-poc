@@ -6,6 +6,7 @@ struct MenuListView: View {
     let playingID: Track.ID?
 
     static let minRowHeight: CGFloat = 34
+    static let artworkSize: CGFloat = 28
 
     var body: some View {
         GeometryReader { geo in
@@ -38,9 +39,26 @@ struct MenuListView: View {
 
     private func row(_ item: MenuItem, selected: Bool) -> some View {
         HStack(spacing: 8) {
-            Text(item.title)
-                .font(Theme.rowFont)
-                .lineLimit(1)
+            if let url = item.artworkURL {
+                AsyncImage(url: url) { image in
+                    image.resizable().scaledToFill()
+                } placeholder: {
+                    Theme.track
+                }
+                .frame(width: Self.artworkSize, height: Self.artworkSize)
+                .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+            }
+            VStack(alignment: .leading, spacing: 0) {
+                Text(item.title)
+                    .font(item.subtitle == nil ? Theme.rowFont : .system(size: 15))
+                    .lineLimit(1)
+                if let subtitle = item.subtitle {
+                    Text(subtitle)
+                        .font(.system(size: 12))
+                        .foregroundStyle(selected ? Theme.selectionText.opacity(0.75) : Theme.secondary)
+                        .lineLimit(1)
+                }
+            }
             if item.id == playingID {
                 Image(systemName: "speaker.wave.2.fill")
                     .font(.system(size: 11))
