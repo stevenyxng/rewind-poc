@@ -16,10 +16,7 @@ def load(root: Path) -> list[dict]:
     rows = []
     for path in sorted(root.glob("*/*.json")):
         record = json.loads(path.read_text(encoding="utf-8"))
-        tuning = record.pop("tuning", {})
-        row = {"user": path.parent.name, "file": path.name, **record}
-        row.update({f"tuning.{k}": v for k, v in sorted(tuning.items())})
-        rows.append(row)
+        rows.append({"user": path.parent.name, "file": path.name, **record})
     return rows
 
 
@@ -45,9 +42,9 @@ def main() -> None:
         users = len({r["user"] for r in group})
         means = [sum(r.get(m, 0) for r in group) / len(group) for m in METRICS]
         print(variant.ljust(14) + f"{users:5}  {len(group):8}  " + "  ".join(f"{v:14.1f}" for v in means))
-    excluded = sum(1 for r in rows if r.get("tuning_customized") or r.get("config_source") != "remote")
+    excluded = sum(1 for r in rows if r.get("config_source") != "remote")
     if excluded:
-        print(f"\nNote: {excluded} session(s) had Haptics Lab edits or no remote config; filter them in the CSV.")
+        print(f"\nNote: {excluded} session(s) didn't reach Remote Config (default variant); filter them in the CSV.")
 
 
 if __name__ == "__main__":

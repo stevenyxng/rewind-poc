@@ -5,29 +5,26 @@ import FirebaseAuth
 import FirebaseRemoteConfig
 import FirebaseStorage
 
-/// Haptic A/B tests via Firebase Remote Config, with each session's numbers uploaded to Storage.
+/// A/B variant from Firebase Remote Config (`variant`), with each session's numbers uploaded to Storage.
 ///
-/// `haptics_tuning` is a JSON object of `HapticParameter` raw values to override, e.g.
-/// `{"detentSharpness": 0.4}`. A fresh install waits briefly for its variant; after that, values
-/// fetched this launch are applied on the next one, so the feel never changes mid-session.
-/// Only call when Firebase is configured.
+/// A fresh install waits briefly for its variant; after that, the value fetched this launch is used
+/// on the next one, so the UI never switches mid-session. Only call when Firebase is configured.
 @MainActor
-enum HapticExperiment {
-    static let variantKey = "haptic_variant"
-    static let tuningKey = "haptics_tuning"
+enum Experiment {
+    static let variantKey = "variant"
+    static let defaultVariant = "control"
     static let usageFolder = "usage"
 
-    /// What this launch is running, recorded with every session.
-    private static var variant = "control"
+    /// Where this launch's variant came from ("remote", or "default" if Remote Config wasn't reached).
     private static var configSource = "default"
 
-    static func apply(to haptics: HapticsEngine) async {
+    static func fetchVariant() async -> String {
         let config = RemoteConfig.remoteConfig()
         let settings = RemoteConfigSettings()
         settings.fetchTimeout = 3
         settings.minimumFetchInterval = 0         // small test group: pick up console changes on next launch
         config.configSettings = settings
-        config.setDefaults([variantKey: "control" as NSString, tuningKey: "{}" as NSString])
+        config.setDefaults([variantKey: defaultVariant as NSString])
 
         if config.lastFetchStatus == .noFetchYet {
             _ = try? await config.fetchAndActivate()
@@ -36,11 +33,10 @@ enum HapticExperiment {
             Task { _ = try? await config.fetch() }     // for next launch; don't hold up start-up
         }
 
-        variant = config[variantKey].stringValue
+        let variant = config[variantKey].stringValue
         configSource = config[variantKey].source == .remote ? "remote" : "default"
-        haptics.tuning.remote = HapticsTuning.remoteValues(json: config[tuningKey].stringValue)
         Analytics.setUserProperty(variant, forName: variantKey)
-        Analytics.setUserProperty(haptics.tuning.isCustomized ? "true" : "false", forName: "tuning_customized")
+        return variant
     }
 
     static func log(_ name: String, _ parameters: [String: Any]) {
@@ -48,13 +44,11 @@ enum HapticExperiment {
     }
 
     /// Uploads one session to `usage/<uid>/<ms since 1970>.json`, finishing even if the app is backgrounded.
-    static func upload(_ summary: [String: Any], tuning: HapticsTuning) {
+    static func upload(_ summary: [String: Any], variant: String) {
         let now = Date()
         var record = summary
         record["variant"] = variant
         record["config_source"] = configSource
-        record["tuning_customized"] = tuning.isCustomized
-        record["tuning"] = Dictionary(uniqueKeysWithValues: HapticParameter.allCases.map { ($0.rawValue, tuning[$0]) })
         record["ended_at"] = ISO8601DateFormatter().string(from: now)
         record["app_version"] = AppModel.version
         guard let data = try? JSONSerialization.data(withJSONObject: record, options: [.sortedKeys]) else { return }
